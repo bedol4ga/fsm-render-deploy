@@ -552,67 +552,131 @@
 
         // ========== ПАРСИНГ ==========
         function parseReport(text) {
-            const dateMatch = text.match(/Date:\s*([\d\.\-\s]+)/i);
-            const dateRange = dateMatch ? dateMatch[1].trim() : 'Unknown';
-            const accountsMatch = text.match(/Accounts:\s*(\d+)/i);
-            const accounts = accountsMatch ? parseInt(accountsMatch[1]) : 0;
-            const priceMatch = text.match(/Price of all drop:\s*~\s*([\d\.]+)\$/i);
-            const totalPrice = priceMatch ? parseFloat(priceMatch[1]) : 0;
-            
-            const lines = text.split('\n');
-            const caseLines = [];
-            let inCaseTable = false, caseHeaderPassed = false;
-            
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                if (line.includes('Case') && line.includes('Amount')) { inCaseTable = true; caseHeaderPassed = false; continue; }
-                if (inCaseTable && line.includes('-----')) { caseHeaderPassed = !caseHeaderPassed; continue; }
-                if (inCaseTable && caseHeaderPassed && line.includes('|')) {
-                    const parts = line.split('|').map(p => p.trim());
-                    if (parts.length >= 2) {
-                        const caseName = parts[0];
-                        const amount = parseInt(parts[1]);
-                        if (caseName && !isNaN(amount) && amount > 0 && caseName !== 'Case') {
-                            caseLines.push({ name: caseName, amount: amount });
-                        }
-                    }
+    console.log("Начинаем парсинг...");
+    
+    // Даты
+    const dateMatch = text.match(/Date:\s*([\d\.\-\s]+)/i);
+    const dateRange = dateMatch ? dateMatch[1].trim() : 'Unknown';
+    
+    // Аккаунты
+    const accountsMatch = text.match(/Accounts:\s*(\d+)/i);
+    const accounts = accountsMatch ? parseInt(accountsMatch[1]) : 0;
+    
+    // Общая сумма
+    const priceMatch = text.match(/Price of all drop:\s*~\s*([\d\.]+)\$/i);
+    const totalPrice = priceMatch ? parseFloat(priceMatch[1]) : 0;
+    
+    const lines = text.split('\n');
+    
+    // ========== ПАРСИНГ КЕЙСОВ ==========
+    const caseLines = [];
+    let inCaseTable = false;
+    let caseHeaderPassed = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.includes('Case') && line.includes('Amount') && line.includes('% of drops')) {
+            inCaseTable = true;
+            caseHeaderPassed = false;
+            continue;
+        }
+        if (inCaseTable && line.includes('-----')) {
+            if (caseHeaderPassed) {
+                inCaseTable = false;
+            } else {
+                caseHeaderPassed = true;
+            }
+            continue;
+        }
+        if (inCaseTable && caseHeaderPassed && line.includes('|')) {
+            const parts = line.split('|').map(p => p.trim());
+            if (parts.length >= 2) {
+                const caseName = parts[0];
+                const amount = parseInt(parts[1]);
+                if (caseName && !isNaN(amount) && amount > 0 && caseName !== 'Case') {
+                    caseLines.push({ name: caseName, amount: amount });
+                    console.log("✅ Кейс:", caseName, amount);
                 }
             }
-            
-            const skins = [];
-            let inSkinTable = false, skinHeaderPassed = false;
-            for (let i = 0; i < lines.length; i++) {
+        }
+    }
+    
+    // ========== ПАРСИНГ СКИНОВ (с проверкой наличия) ==========
+    const skins = [];
+    
+    // Проверяем есть ли вообще таблица со скинами
+    const hasSkinTable = text.includes('Skin (>0.6$)') || text.includes('Skin');
+    
+    if (hasSkinTable) {
+        console.log("🟢 Найдена таблица со скинами");
+        
+        // Ищем строку с заголовком таблицы скинов
+        let skinTableStart = -1;
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].includes('Skin') && lines[i].includes('Amount') && lines[i].includes('Price')) {
+                skinTableStart = i;
+                break;
+            }
+        }
+        
+        if (skinTableStart !== -1) {
+            // Парсим строки после заголовка
+            for (let i = skinTableStart + 1; i < lines.length; i++) {
                 const line = lines[i];
-                if (line.includes('Skin') && line.includes('Amount') && line.includes('Price')) { inSkinTable = true; skinHeaderPassed = false; continue; }
-                if (inSkinTable && line.includes('-----')) { skinHeaderPassed = !skinHeaderPassed; continue; }
-                if (inSkinTable && skinHeaderPassed && line.includes('|')) {
+                
+                // Выходим если встретили разделитель
+                if (line.includes('-----') || line.includes('➙')) {
+                    break;
+                }
+                
+                // Проверяем что строка содержит скин (есть | и нет Case)
+                if (line.includes('|') && !line.includes('Case')) {
                     const parts = line.split('|').map(p => p.trim());
                     if (parts.length >= 3) {
                         let skinName = parts[0];
                         const amount = parseInt(parts[1]);
                         const price = parseFloat(parts[2]);
-                        skinName = skinName.replace(/^[-–—\s]+/, '').replace(/[-–—\s]+$/, '').trim();
-                        if (skinName && !isNaN(amount) && !isNaN(price) && amount > 0 && skinName !== 'Skin') {
+                        
+                        // Очистка имени от лишних символов
+                        skinName = skinName.replace(/^[-–—\s]+/, '');
+                        skinName = skinName.replace(/[-–—\s]+$/, '');
+                        skinName = skinName.trim();
+                        
+                        // Проверяем что данные валидны
+                        if (skinName && skinName.length > 3 && !isNaN(amount) && !isNaN(price) && amount > 0 && price > 0.6) {
                             skins.push({ name: skinName, amount: amount, price: price });
+                            console.log("✅ Скин:", skinName, amount, price);
                         }
                     }
                 }
             }
-            
-            const [start, end] = dateRange.split(' - ');
-            const [day, month, year] = start ? start.split('.') : [0,0,0];
-            
-            return {
-                dateRange: dateRange,
-                weekStart: `${year}-${month}-${day}`,
-                weekEnd: end || '',
-                accounts: accounts,
-                totalPrice: totalPrice,
-                totalCases: caseLines.reduce((sum, c) => sum + c.amount, 0),
-                cases: caseLines,
-                skins: skins
-            };
         }
+    } else {
+        console.log("🟡 Таблица со скинами отсутствует в этом отчёте");
+    }
+    
+    const totalCases = caseLines.reduce((sum, c) => sum + c.amount, 0);
+    
+    console.log("📊 ИТОГ ПАРСИНГА:");
+    console.log("  - Дата:", dateRange);
+    console.log("  - Кейсов:", caseLines.length, "штук");
+    console.log("  - Скинов:", skins.length, "штук");
+    if (skins.length > 0) console.log("  - Скины:", skins);
+    
+    const [start, end] = dateRange.split(' - ');
+    const [day, month, year] = start ? start.split('.') : [0, 0, 0];
+    
+    return {
+        dateRange: dateRange,
+        weekStart: `${year}-${month}-${day}`,
+        weekEnd: end || '',
+        accounts: accounts,
+        totalPrice: totalPrice,
+        totalCases: totalCases,
+        cases: caseLines,
+        skins: skins
+    };
+}
 
         // ========== АВТОРИЗАЦИЯ ==========
         async function checkAuth() {
