@@ -565,7 +565,7 @@
     
     const lines = text.split('\n');
     
-    // Кейсы
+    // ========== ПАРСИНГ КЕЙСОВ ==========
     const caseLines = [];
     let inCaseTable = false;
     let caseHeaderPassed = false;
@@ -598,7 +598,7 @@
         }
     }
     
-    // Скины
+    // ========== ПАРСИНГ СКИНОВ (ИСПРАВЛЕНО) ==========
     const skins = [];
     
     let skinTableStartIndex = -1;
@@ -612,50 +612,47 @@
     if (skinTableStartIndex !== -1) {
         console.log("🟢 Нашли таблицу скинов на строке", skinTableStartIndex);
         
-        // ВЫВОДИМ ВСЕ СТРОКИ ТАБЛИЦЫ
-        console.log("📋 ДОСЛОВНОЕ СОДЕРЖИМОЕ СТРОК:");
-        for (let i = skinTableStartIndex; i < Math.min(skinTableStartIndex + 10, lines.length); i++) {
-            const rawLine = lines[i];
-            console.log(`  [${i}] ->`, JSON.stringify(rawLine));
-            console.log(`       Длина: ${rawLine.length}, содержит | : ${rawLine.includes('|')}`);
-        }
+        // Пропускаем заголовок и ПЕРВЫЙ разделитель
+        let startParsing = false;
+        let dividerCount = 0;
         
-        // Парсим строки
         for (let i = skinTableStartIndex + 1; i < lines.length; i++) {
             const line = lines[i];
             
+            // Считаем разделители
             if (line.includes('-----')) {
-                console.log(`  → Строка ${i} содержит -----, останавливаемся`);
-                break;
+                dividerCount++;
+                if (dividerCount === 1) {
+                    console.log("  → Пропускаем первый разделитель");
+                    continue;
+                } else if (dividerCount === 2) {
+                    console.log("  → Встретили второй разделитель, выходим");
+                    break;
+                }
             }
-            if (line.includes('➙')) {
-                console.log(`  → Строка ${i} содержит ➙, останавливаемся`);
-                break;
-            }
-            if (line.trim() === '') continue;
             
-            console.log(`  → Обрабатываем строку ${i}:`, JSON.stringify(line));
-            
-            if (line.includes('|')) {
-                const parts = line.split('|').map(p => p.trim());
-                console.log(`     Разбито на части (${parts.length}):`, parts);
+            // После первого разделителя начинаем парсить
+            if (dividerCount === 1 && !line.includes('-----')) {
+                if (line.trim() === '') continue;
+                if (line.includes('➙')) break;
                 
-                if (parts.length >= 3) {
-                    let skinName = parts[0];
-                    const amount = parseInt(parts[1]);
-                    const price = parseFloat(parts[2]);
+                if (line.includes('|')) {
+                    const parts = line.split('|').map(p => p.trim());
+                    console.log("  → Обрабатываем строку:", parts);
                     
-                    skinName = skinName.replace(/^[-–—\s]+/, '');
-                    skinName = skinName.replace(/[-–—\s]+$/, '');
-                    skinName = skinName.trim();
-                    
-                    console.log(`     Распознано: имя="${skinName}", кол-во=${amount}, цена=${price}`);
-                    
-                    if (skinName && skinName.length > 3 && !isNaN(amount) && amount > 0 && !isNaN(price) && price > 0.6) {
-                        skins.push({ name: skinName, amount: amount, price: price });
-                        console.log(`     ✅ ДОБАВЛЕН СКИН!`);
-                    } else {
-                        console.log(`     ❌ НЕ ПРОШЁЛ ВАЛИДАЦИЮ`);
+                    if (parts.length >= 3) {
+                        let skinName = parts[0];
+                        const amount = parseInt(parts[1]);
+                        const price = parseFloat(parts[2]);
+                        
+                        skinName = skinName.replace(/^[-–—\s]+/, '');
+                        skinName = skinName.replace(/[-–—\s]+$/, '');
+                        skinName = skinName.trim();
+                        
+                        if (skinName && skinName.length > 3 && !isNaN(amount) && amount > 0 && !isNaN(price) && price > 0) {
+                            skins.push({ name: skinName, amount: amount, price: price });
+                            console.log("  ✅ ДОБАВЛЕН СКИН:", skinName, amount, price);
+                        }
                     }
                 }
             }
@@ -667,6 +664,7 @@
     const totalCases = caseLines.reduce((sum, c) => sum + c.amount, 0);
     
     console.log("📊 ИТОГ:", { casesCount: caseLines.length, skinsCount: skins.length });
+    if (skins.length > 0) console.log("  Скины:", skins);
     
     const [start, end] = dateRange.split(' - ');
     const [day, month, year] = start ? start.split('.') : [0, 0, 0];
