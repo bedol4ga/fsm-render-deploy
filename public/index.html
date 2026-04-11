@@ -612,14 +612,11 @@
     if (skinTableStartIndex !== -1) {
         console.log("🟢 Нашли таблицу скинов на строке", skinTableStartIndex);
         
-        // Пропускаем заголовок и ПЕРВЫЙ разделитель
-        let startParsing = false;
         let dividerCount = 0;
         
         for (let i = skinTableStartIndex + 1; i < lines.length; i++) {
             const line = lines[i];
             
-            // Считаем разделители
             if (line.includes('-----')) {
                 dividerCount++;
                 if (dividerCount === 1) {
@@ -631,27 +628,37 @@
                 }
             }
             
-            // После первого разделителя начинаем парсить
             if (dividerCount === 1 && !line.includes('-----')) {
                 if (line.trim() === '') continue;
                 if (line.includes('➙')) break;
                 
                 if (line.includes('|')) {
                     const parts = line.split('|').map(p => p.trim());
-                    console.log("  → Обрабатываем строку:", parts);
+                    console.log("  → Разбито на части:", parts);
                     
                     if (parts.length >= 3) {
+                        // Склеиваем название скина (может быть разбито на несколько частей из-за | в названии)
                         let skinName = parts[0];
-                        const amount = parseInt(parts[1]);
-                        const price = parseFloat(parts[2]);
+                        let amountIndex = 1;
+                        
+                        // Если вторая часть не число — значит это часть названия
+                        if (isNaN(parseInt(parts[1]))) {
+                            skinName = skinName + " | " + parts[1];
+                            amountIndex = 2;
+                        }
+                        
+                        const amount = parseInt(parts[amountIndex]);
+                        const price = parseFloat(parts[amountIndex + 1]);
                         
                         skinName = skinName.replace(/^[-–—\s]+/, '');
                         skinName = skinName.replace(/[-–—\s]+$/, '');
                         skinName = skinName.trim();
                         
+                        console.log(`  → Собрано: имя="${skinName}", кол-во=${amount}, цена=${price}`);
+                        
                         if (skinName && skinName.length > 3 && !isNaN(amount) && amount > 0 && !isNaN(price) && price > 0) {
                             skins.push({ name: skinName, amount: amount, price: price });
-                            console.log("  ✅ ДОБАВЛЕН СКИН:", skinName, amount, price);
+                            console.log("  ✅ ДОБАВЛЕН СКИН!");
                         }
                     }
                 }
