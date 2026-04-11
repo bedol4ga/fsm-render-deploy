@@ -1,1 +1,880 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FSM Panel | Steam Stats Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
+        body {
+            font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+            padding: 20px;
+            min-height: 100vh;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        body.dark {
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            color: #e0e0e0;
+        }
+
+        body.light {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+            color: #1a1a2e;
+        }
+
+        body.light .card {
+            background: rgba(255,255,255,0.95);
+            border: 1px solid rgba(0,0,0,0.1);
+            color: #1a1a2e;
+        }
+
+        body.light .stat-box {
+            background: rgba(0,0,0,0.05);
+        }
+
+        body.light th {
+            background: rgba(255,107,107,0.15);
+        }
+
+        body.light input, body.light textarea {
+            background: white;
+            color: #1a1a2e;
+            border-color: #ff6b6b;
+        }
+
+        body.light .header {
+            background: rgba(255,255,255,0.5);
+        }
+
+        body.light .config-panel {
+            background: rgba(255,107,107,0.1);
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.5);
+            border: none;
+            border-radius: 50px;
+            padding: 10px 18px;
+            cursor: pointer;
+            font-size: 20px;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, #ff6b6b, #ff8e53);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background: rgba(30,30,46,0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+        }
+
+        .card h2 {
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            border-left: 4px solid #ff6b6b;
+            padding-left: 15px;
+        }
+
+        .user-panel {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .user-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+        }
+
+        .steam-login-btn {
+            background: #1b2838;
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .logout-btn {
+            background: #333;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 12px;
+            color: white;
+            cursor: pointer;
+        }
+
+        .filters-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: flex-end;
+        }
+
+        .filter-group {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .filter-group label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 5px;
+            opacity: 0.7;
+        }
+
+        .filter-group input, .filter-group select {
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid #ff6b6b;
+            background: rgba(0,0,0,0.3);
+            color: inherit;
+        }
+
+        .reset-filters {
+            background: rgba(255,107,107,0.3);
+            padding: 8px 16px;
+            font-size: 14px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            background: #0a0a14;
+            border: 1px solid #ff6b6b;
+            border-radius: 12px;
+            color: #e0e0e0;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            resize: vertical;
+            margin-bottom: 15px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #ff6b6b, #ff8e53);
+            border: none;
+            padding: 12px 28px;
+            border-radius: 12px;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .stat-box {
+            background: rgba(0,0,0,0.4);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, #ff6b6b, #ff8e53);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 10px 8px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-size: 14px;
+        }
+
+        th {
+            background: rgba(255,107,107,0.2);
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        th:hover {
+            background: rgba(255,107,107,0.4);
+        }
+
+        tr:hover {
+            background: rgba(255,255,255,0.05);
+        }
+
+        .two-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        .three-columns {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        @media (max-width: 1000px) {
+            .two-columns, .three-columns {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .chart-container {
+            height: 280px;
+            position: relative;
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 8px;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .skeleton-chart {
+            height: 250px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #ff6b6b, #ff8e53);
+            color: white;
+            font-weight: bold;
+            animation: slideIn 0.3s ease;
+            z-index: 1000;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .loading-indicator {
+            display: none;
+            margin-top: 15px;
+            padding: 12px;
+            background: rgba(255,107,107,0.2);
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .sort-icon {
+            margin-left: 5px;
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body class="dark">
+    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+
+    <div class="container">
+        <div class="header">
+            <h1>❤️ FSM PANEL | STATS DASHBOARD ❤️</h1>
+            <p>Автоматический сбор и аналитика дропов из кейсов</p>
+        </div>
+
+        <!-- Блок авторизации -->
+        <div class="card" id="authPanel">
+            <div style="text-align: center; padding: 20px;">
+                <div class="spinner"></div> Загрузка...
+            </div>
+        </div>
+
+        <!-- Основной контент (показывается после авторизации) -->
+        <div id="mainContent" style="display: none;">
+            <div class="card input-area">
+                <h2>📥 Добавить новую неделю</h2>
+                <textarea id="reportText" placeholder="Вставь сюда текст отчёта из FSM Panel..."></textarea>
+                <button id="submitBtn" onclick="addWeek()">💾 Сохранить неделю</button>
+                <div id="loadingIndicator" class="loading-indicator">
+                    <span class="spinner"></span>
+                    <span>Отправка...</span>
+                    <span id="loadingStep" style="display: block; font-size: 12px; margin-top: 5px;">Шаг 1/3: Парсинг</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>🔍 Фильтры и сортировка</h2>
+                <div class="filters-bar">
+                    <div class="filter-group">
+                        <label>📅 Дата с</label>
+                        <input type="date" id="filterDateFrom">
+                    </div>
+                    <div class="filter-group">
+                        <label>📅 Дата по</label>
+                        <input type="date" id="filterDateTo">
+                    </div>
+                    <div class="filter-group">
+                        <label>💰 Мин. сумма</label>
+                        <input type="number" id="filterMinPrice" placeholder="$">
+                    </div>
+                    <div class="filter-group">
+                        <label>🔽 Сортировка</label>
+                        <select id="sortOrder">
+                            <option value="date_desc">Новые → Старые</option>
+                            <option value="date_asc">Старые → Новые</option>
+                            <option value="price_desc">Дорогие → Дешёвые</option>
+                            <option value="price_asc">Дешёвые → Дорогие</option>
+                            <option value="cases_desc">Много кейсов → Мало</option>
+                        </select>
+                    </div>
+                    <button class="reset-filters" onclick="resetFilters()">🔄 Сбросить</button>
+                </div>
+            </div>
+
+            <div class="stats-grid" id="summaryStats"></div>
+
+            <div class="three-columns">
+                <div class="card">
+                    <h2>📈 Динамика дропов</h2>
+                    <div class="chart-container">
+                        <canvas id="weeklyChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>🥧 Топ кейсов (%)</h2>
+                    <div class="chart-container">
+                        <canvas id="pieChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>💰 Сумма по неделям</h2>
+                    <div class="chart-container">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="two-columns">
+                <div class="card">
+                    <h2>🏆 Топ кейсов</h2>
+                    <div class="table-wrapper">
+                        <table id="topCasesTable">
+                            <thead>
+                                <tr><th data-sort="name">Кейс <span class="sort-icon">↕️</span></th><th data-sort="amount">Кол-во <span class="sort-icon">↕️</span></th><th data-sort="percent">% <span class="sort-icon">↕️</span></th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>💎 Топ скинов</h2>
+                    <div class="table-wrapper">
+                        <table id="topSkinsTable">
+                            <thead>
+                                <tr><th data-sort="name">Скин <span class="sort-icon">↕️</span></th><th data-sort="amount">Кол-во <span class="sort-icon">↕️</span></th><th data-sort="price">Цена <span class="sort-icon">↕️</span></th><th data-sort="total">Общая <span class="sort-icon">↕️</span></th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>📅 История по неделям</h2>
+                <div class="table-wrapper">
+                    <table id="historyTable">
+                        <thead><tr><th>Неделя</th><th>Кейсов</th><th>Сумма</th><th>Скинов</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========== НАСТРОЙКИ ==========
+        // ⚠️ ЗАМЕНИ НА СВОЙ URL СЕРВЕРА!
+        const API_URL = '';
+        
+        let allData = [];
+        let filteredData = [];
+        let currentCasesData = [];
+        let currentSkinsData = [];
+        let weeklyChart = null, pieChart = null, barChart = null;
+        let activeToast = null;
+        let casesSortField = 'amount', casesSortOrder = 'desc';
+        let skinsSortField = 'total', skinsSortOrder = 'desc';
+
+        // ========== ТЕМА ==========
+        function toggleTheme() {
+            const body = document.body;
+            const btn = document.querySelector('.theme-toggle');
+            if (body.classList.contains('dark')) {
+                body.classList.remove('dark');
+                body.classList.add('light');
+                btn.innerHTML = '☀️';
+                localStorage.setItem('theme', 'light');
+            } else {
+                body.classList.remove('light');
+                body.classList.add('dark');
+                btn.innerHTML = '🌙';
+                localStorage.setItem('theme', 'dark');
+            }
+            updateChartsColors();
+        }
+
+        function updateChartsColors() {
+            const isDark = document.body.classList.contains('dark');
+            const textColor = isDark ? '#e0e0e0' : '#1a1a2e';
+            if (weeklyChart) {
+                weeklyChart.options.plugins.legend.labels.color = textColor;
+                weeklyChart.update();
+            }
+            if (pieChart) {
+                pieChart.options.plugins.legend.labels.color = textColor;
+                pieChart.update();
+            }
+            if (barChart) {
+                barChart.options.plugins.legend.labels.color = textColor;
+                barChart.update();
+            }
+        }
+
+        if (localStorage.getItem('theme') === 'light') {
+            document.body.classList.remove('dark');
+            document.body.classList.add('light');
+            document.querySelector('.theme-toggle').innerHTML = '☀️';
+        }
+
+        // ========== TOAST ==========
+        function showToast(msg, isError = false) {
+            if (activeToast) activeToast.remove();
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerText = msg;
+            if (isError) toast.style.background = 'linear-gradient(135deg, #ff4757, #ff6b6b)';
+            document.body.appendChild(toast);
+            activeToast = toast;
+            setTimeout(() => { if (activeToast === toast) toast.remove(); }, 2500);
+        }
+
+        // ========== ПАРСИНГ ==========
+        function parseReport(text) {
+            const dateMatch = text.match(/Date:\s*([\d\.\-\s]+)/i);
+            const dateRange = dateMatch ? dateMatch[1].trim() : 'Unknown';
+            const accountsMatch = text.match(/Accounts:\s*(\d+)/i);
+            const accounts = accountsMatch ? parseInt(accountsMatch[1]) : 0;
+            const priceMatch = text.match(/Price of all drop:\s*~\s*([\d\.]+)\$/i);
+            const totalPrice = priceMatch ? parseFloat(priceMatch[1]) : 0;
+            
+            const lines = text.split('\n');
+            const caseLines = [];
+            let inCaseTable = false, caseHeaderPassed = false;
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.includes('Case') && line.includes('Amount')) { inCaseTable = true; caseHeaderPassed = false; continue; }
+                if (inCaseTable && line.includes('-----')) { caseHeaderPassed = !caseHeaderPassed; continue; }
+                if (inCaseTable && caseHeaderPassed && line.includes('|')) {
+                    const parts = line.split('|').map(p => p.trim());
+                    if (parts.length >= 2) {
+                        const caseName = parts[0];
+                        const amount = parseInt(parts[1]);
+                        if (caseName && !isNaN(amount) && amount > 0 && caseName !== 'Case') {
+                            caseLines.push({ name: caseName, amount: amount });
+                        }
+                    }
+                }
+            }
+            
+            const skins = [];
+            let inSkinTable = false, skinHeaderPassed = false;
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.includes('Skin') && line.includes('Amount') && line.includes('Price')) { inSkinTable = true; skinHeaderPassed = false; continue; }
+                if (inSkinTable && line.includes('-----')) { skinHeaderPassed = !skinHeaderPassed; continue; }
+                if (inSkinTable && skinHeaderPassed && line.includes('|')) {
+                    const parts = line.split('|').map(p => p.trim());
+                    if (parts.length >= 3) {
+                        let skinName = parts[0];
+                        const amount = parseInt(parts[1]);
+                        const price = parseFloat(parts[2]);
+                        skinName = skinName.replace(/^[-–—\s]+/, '').replace(/[-–—\s]+$/, '').trim();
+                        if (skinName && !isNaN(amount) && !isNaN(price) && amount > 0 && skinName !== 'Skin') {
+                            skins.push({ name: skinName, amount: amount, price: price });
+                        }
+                    }
+                }
+            }
+            
+            const [start, end] = dateRange.split(' - ');
+            const [day, month, year] = start ? start.split('.') : [0,0,0];
+            
+            return {
+                dateRange: dateRange,
+                weekStart: `${year}-${month}-${day}`,
+                weekEnd: end || '',
+                accounts: accounts,
+                totalPrice: totalPrice,
+                totalCases: caseLines.reduce((sum, c) => sum + c.amount, 0),
+                cases: caseLines,
+                skins: skins
+            };
+        }
+
+        // ========== АВТОРИЗАЦИЯ ==========
+        async function checkAuth() {
+            try {
+                const res = await fetch(`${API_URL}/api/me`, { 
+                    credentials: 'include',
+                    mode: 'cors'
+                });
+                const data = await res.json();
+                if (data.success && data.user) {
+                    document.getElementById('authPanel').innerHTML = `
+                        <div class="user-panel">
+                            <img class="user-avatar" src="${data.user.avatar_url}" onerror="this.src='https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/fe/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb.jpg'">
+                            <div><strong>${data.user.username}</strong><br><small>Steam ID: ${data.user.steam_id.slice(-8)}</small></div>
+                            <button class="logout-btn" onclick="logout()">🚪 Выйти</button>
+                        </div>
+                    `;
+                    document.getElementById('mainContent').style.display = 'block';
+                    loadDrops();
+                } else {
+                    document.getElementById('authPanel').innerHTML = `
+                        <div style="text-align: center; padding: 30px;">
+                            <h3>🔐 Войдите через Steam</h3>
+                            <p style="margin: 15px 0;">Чтобы сохранять и просматривать свои дропы</p>
+                            <button class="steam-login-btn" onclick="login()">🎮 Войти через Steam</button>
+                        </div>
+                    `;
+                    document.getElementById('mainContent').style.display = 'none';
+                }
+            } catch(e) {
+                console.error(e);
+                document.getElementById('authPanel').innerHTML = `<div style="text-align:center;padding:20px;color:#ff6b6b;">❌ Ошибка подключения к серверу</div>`;
+            }
+        }
+
+        function login() {
+            window.location.href = `${API_URL}/auth/steam`;
+        }
+
+        function logout() {
+            window.location.href = `${API_URL}/auth/logout`;
+        }
+
+        // ========== ЗАГРУЗКА ДАННЫХ ==========
+        async function loadDrops() {
+            try {
+                const res = await fetch(`${API_URL}/api/drops`, { 
+                    credentials: 'include'
+                });
+                const result = await res.json();
+                if (result.success) {
+                    allData = result.data;
+                    applyFilters();
+                } else {
+                    showToast('❌ Ошибка загрузки данных', true);
+                }
+            } catch(e) {
+                showToast('❌ Ошибка соединения', true);
+            }
+        }
+
+        async function addWeek() {
+            const text = document.getElementById('reportText').value;
+            if (!text.trim()) { showToast('❌ Вставь текст отчёта', true); return; }
+            
+            const btn = document.getElementById('submitBtn');
+            const loader = document.getElementById('loadingIndicator');
+            const loadingStep = document.getElementById('loadingStep');
+            btn.disabled = true;
+            loader.style.display = 'block';
+            
+            try {
+                loadingStep.innerText = 'Шаг 1/3: Парсинг...';
+                const parsed = parseReport(text);
+                loadingStep.innerText = 'Шаг 2/3: Отправка...';
+                const res = await fetch(`${API_URL}/api/drops`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(parsed)
+                });
+                loadingStep.innerText = 'Шаг 3/3: Готово!';
+                if (res.ok) {
+                    showToast('✅ Неделя добавлена!');
+                    document.getElementById('reportText').value = '';
+                    await loadDrops();
+                } else {
+                    showToast('❌ Ошибка сохранения', true);
+                }
+            } catch(e) {
+                showToast('❌ Ошибка: ' + e.message, true);
+            } finally {
+                loader.style.display = 'none';
+                btn.disabled = false;
+            }
+        }
+
+        // ========== ФИЛЬТРАЦИЯ И ОТРИСОВКА ==========
+        function applyFilters() {
+            let data = [...allData];
+            const dateFrom = document.getElementById('filterDateFrom').value;
+            const dateTo = document.getElementById('filterDateTo').value;
+            const minPrice = parseFloat(document.getElementById('filterMinPrice').value);
+            const sortOrder = document.getElementById('sortOrder').value;
+            
+            if (dateFrom) data = data.filter(w => w.week_start && w.week_start >= dateFrom);
+            if (dateTo) data = data.filter(w => w.week_end && w.week_end <= dateTo);
+            if (minPrice && !isNaN(minPrice)) data = data.filter(w => w.total_price >= minPrice);
+            
+            if (sortOrder === 'date_desc') data.sort((a,b) => new Date(b.week_start) - new Date(a.week_start));
+            if (sortOrder === 'date_asc') data.sort((a,b) => new Date(a.week_start) - new Date(b.week_start));
+            if (sortOrder === 'price_desc') data.sort((a,b) => b.total_price - a.total_price);
+            if (sortOrder === 'price_asc') data.sort((a,b) => a.total_price - b.total_price);
+            if (sortOrder === 'cases_desc') data.sort((a,b) => b.total_cases - a.total_cases);
+            
+            filteredData = data;
+            renderDashboard();
+        }
+
+        function resetFilters() {
+            document.getElementById('filterDateFrom').value = '';
+            document.getElementById('filterDateTo').value = '';
+            document.getElementById('filterMinPrice').value = '';
+            document.getElementById('sortOrder').value = 'date_desc';
+            applyFilters();
+        }
+
+        function renderDashboard() {
+            if (!filteredData.length) {
+                document.getElementById('summaryStats').innerHTML = '<div class="stat-box">Нет данных</div>';
+                return;
+            }
+            
+            let totalCasesAgg = 0, totalPriceAgg = 0, totalSkinsAgg = 0;
+            const casesMap = new Map(), skinsMap = new Map();
+            
+            for (const week of filteredData) {
+                totalCasesAgg += week.total_cases || 0;
+                totalPriceAgg += week.total_price || 0;
+                if (week.cases) {
+                    week.cases.forEach(c => casesMap.set(c.name, (casesMap.get(c.name) || 0) + c.amount));
+                }
+                if (week.skins) {
+                    week.skins.forEach(s => {
+                        if (!skinsMap.has(s.name)) skinsMap.set(s.name, { amount: 0, price: s.price });
+                        skinsMap.get(s.name).amount += s.amount;
+                        totalSkinsAgg += s.amount;
+                    });
+                }
+            }
+            
+            document.getElementById('summaryStats').innerHTML = `
+                <div class="stat-box"><div class="stat-value">${filteredData.length}</div><div class="stat-label">Недель</div></div>
+                <div class="stat-box"><div class="stat-value">${totalCasesAgg}</div><div class="stat-label">Всего кейсов</div></div>
+                <div class="stat-box"><div class="stat-value">$${totalPriceAgg.toFixed(2)}</div><div class="stat-label">Общая сумма</div></div>
+                <div class="stat-box"><div class="stat-value">${totalSkinsAgg}</div><div class="stat-label">Скинов >0.6$</div></div>
+                <div class="stat-box"><div class="stat-value">$${(totalPriceAgg / totalCasesAgg).toFixed(2)}</div><div class="stat-label">Средний чек</div></div>
+            `;
+            
+            currentCasesData = Array.from(casesMap.entries()).map(([name, amount]) => ({ name, amount, percent: (amount / totalCasesAgg) * 100 }));
+            currentSkinsData = Array.from(skinsMap.entries()).map(([name, data]) => ({ name, amount: data.amount, price: data.price, total: data.amount * data.price }));
+            
+            renderCasesTable();
+            renderSkinsTable();
+            renderHistoryTable();
+            updateCharts();
+        }
+
+        function renderCasesTable() {
+            const sorted = [...currentCasesData];
+            sorted.sort((a,b) => {
+                let valA = a[casesSortField], valB = b[casesSortField];
+                if (casesSortField === 'name') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
+                return casesSortOrder === 'desc' ? (valA > valB ? -1 : 1) : (valA < valB ? -1 : 1);
+            });
+            document.querySelector('#topCasesTable tbody').innerHTML = sorted.slice(0, 15).map(c => `
+                <tr><td>${c.name}</td><td>${c.amount}</td><td>${c.percent.toFixed(1)}%</td></tr>
+            `).join('');
+        }
+
+        function renderSkinsTable() {
+            const sorted = [...currentSkinsData];
+            sorted.sort((a,b) => {
+                let valA = a[skinsSortField], valB = b[skinsSortField];
+                if (skinsSortField === 'name') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
+                return skinsSortOrder === 'desc' ? (valA > valB ? -1 : 1) : (valA < valB ? -1 : 1);
+            });
+            document.querySelector('#topSkinsTable tbody').innerHTML = sorted.slice(0, 15).map(s => `
+                <tr><td>${s.name}</td><td>${s.amount}</td><td>$${s.price.toFixed(2)}</td><td>$${s.total.toFixed(2)}</td></tr>
+            `).join('');
+        }
+
+        function renderHistoryTable() {
+            document.querySelector('#historyTable tbody').innerHTML = filteredData.slice().reverse().map(w => `
+                <tr><td>${w.date_range || 'Unknown'}</td><td>${w.total_cases || 0}</td><td>$${(w.total_price || 0).toFixed(2)}</td><td>${w.skins?.length || 0}</td></tr>
+            `).join('');
+        }
+
+        function updateCharts() {
+            const labels = filteredData.map((_, i) => `Нед ${i+1}`);
+            const casesData = filteredData.map(w => w.total_cases || 0);
+            const priceData = filteredData.map(w => w.total_price || 0);
+            const isDark = document.body.classList.contains('dark');
+            const textColor = isDark ? '#e0e0e0' : '#1a1a2e';
+            
+            if (weeklyChart) weeklyChart.destroy();
+            weeklyChart = new Chart(document.getElementById('weeklyChart'), {
+                type: 'line',
+                data: { labels, datasets: [
+                    { label: 'Кейсы', data: casesData, borderColor: '#ff6b6b', backgroundColor: 'rgba(255,107,107,0.1)', fill: true, tension: 0.3, yAxisID: 'y' },
+                    { label: 'Сумма ($)', data: priceData, borderColor: '#ff8e53', backgroundColor: 'rgba(255,142,83,0.1)', fill: true, tension: 0.3, yAxisID: 'y1' }
+                ] },
+                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: textColor } } } }
+            });
+            
+            let totalForPie = 0;
+            const pieMap = new Map();
+            filteredData.forEach(w => { if (w.cases) w.cases.forEach(c => { pieMap.set(c.name, (pieMap.get(c.name) || 0) + c.amount); totalForPie += c.amount; }); });
+            const pieData = Array.from(pieMap.entries()).sort((a,b) => b[1] - a[1]).slice(0, 8);
+            
+            if (pieChart) pieChart.destroy();
+            pieChart = new Chart(document.getElementById('pieChart'), {
+                type: 'pie',
+                data: { labels: pieData.map(p => p[0]), datasets: [{ data: pieData.map(p => p[1]), backgroundColor: ['#ff6b6b','#ff8e53','#ffd93d','#6bcb77','#4d96ff','#9b59b6','#e84393','#00cec9'] }] },
+                options: { responsive: true, plugins: { legend: { position: 'right', labels: { color: textColor, font: { size: 10 } } } } }
+            });
+            
+            if (barChart) barChart.destroy();
+            barChart = new Chart(document.getElementById('barChart'), {
+                type: 'bar',
+                data: { labels, datasets: [{ label: 'Сумма ($)', data: priceData, backgroundColor: '#ff8e53', borderRadius: 8 }] },
+                options: { responsive: true, plugins: { legend: { labels: { color: textColor } } } }
+            });
+        }
+
+        function initSortListeners() {
+            document.querySelectorAll('#topCasesTable th').forEach(th => {
+                const field = th.getAttribute('data-sort');
+                if (field) th.onclick = () => {
+                    if (casesSortField === field) casesSortOrder = casesSortOrder === 'desc' ? 'asc' : 'desc';
+                    else { casesSortField = field; casesSortOrder = 'desc'; }
+                    renderCasesTable();
+                };
+            });
+            document.querySelectorAll('#topSkinsTable th').forEach(th => {
+                const field = th.getAttribute('data-sort');
+                if (field) th.onclick = () => {
+                    if (skinsSortField === field) skinsSortOrder = skinsSortOrder === 'desc' ? 'asc' : 'desc';
+                    else { skinsSortField = field; skinsSortOrder = 'desc'; }
+                    renderSkinsTable();
+                };
+            });
+        }
+
+        document.getElementById('filterDateFrom')?.addEventListener('change', applyFilters);
+        document.getElementById('filterDateTo')?.addEventListener('change', applyFilters);
+        document.getElementById('filterMinPrice')?.addEventListener('input', applyFilters);
+        document.getElementById('sortOrder')?.addEventListener('change', applyFilters);
+        
+        setInterval(() => { initSortListeners(); }, 500);
+        
+        checkAuth();
+    </script>
+</body>
+</html>
