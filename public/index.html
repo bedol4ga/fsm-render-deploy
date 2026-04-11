@@ -595,73 +595,85 @@
                 const amount = parseInt(parts[1]);
                 if (caseName && !isNaN(amount) && amount > 0 && caseName !== 'Case') {
                     caseLines.push({ name: caseName, amount: amount });
-                    console.log("✅ Кейс:", caseName, amount);
                 }
             }
         }
     }
     
-    // ========== ПАРСИНГ СКИНОВ (с проверкой наличия) ==========
+    // ========== ПАРСИНГ СКИНОВ (РАБОЧАЯ ВЕРСИЯ) ==========
     const skins = [];
     
-    // Проверяем есть ли вообще таблица со скинами
-    const hasSkinTable = text.includes('Skin (>0.6$)') || text.includes('Skin');
+    // Ищем таблицу со скинами через регулярку прямо по тексту
+    // Формат: название_скина | количество | цена
     
-    if (hasSkinTable) {
-        console.log("🟢 Найдена таблица со скинами");
+    // Разбиваем текст на строки и ищем строки с | и с ценой
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
         
-        // Ищем строку с заголовком таблицы скинов
-        let skinTableStart = -1;
-        for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes('Skin') && lines[i].includes('Amount') && lines[i].includes('Price')) {
-                skinTableStart = i;
-                break;
-            }
+        // Пропускаем строки с кейсами и заголовками
+        if (line.includes('Case') || line.includes('Skin') || line.includes('-----') || line.includes('➙')) {
+            continue;
         }
         
-        if (skinTableStart !== -1) {
-            // Парсим строки после заголовка
-            for (let i = skinTableStart + 1; i < lines.length; i++) {
-                const line = lines[i];
+        // Проверяем что строка содержит | и похожа на скин
+        if (line.includes('|')) {
+            const parts = line.split('|').map(p => p.trim());
+            
+            // Должно быть 3 части: название, количество, цена
+            if (parts.length >= 3) {
+                let skinName = parts[0];
+                const amount = parseInt(parts[1]);
+                const price = parseFloat(parts[2]);
                 
-                // Выходим если встретили разделитель
-                if (line.includes('-----') || line.includes('➙')) {
-                    break;
-                }
+                // Очищаем название от мусора
+                skinName = skinName.replace(/^[-–—\s]+/, '');
+                skinName = skinName.replace(/[-–—\s]+$/, '');
+                skinName = skinName.trim();
                 
-                // Проверяем что строка содержит скин (есть | и нет Case)
-                if (line.includes('|') && !line.includes('Case')) {
-                    const parts = line.split('|').map(p => p.trim());
-                    if (parts.length >= 3) {
-                        let skinName = parts[0];
-                        const amount = parseInt(parts[1]);
-                        const price = parseFloat(parts[2]);
-                        
-                        // Очистка имени от лишних символов
-                        skinName = skinName.replace(/^[-–—\s]+/, '');
-                        skinName = skinName.replace(/[-–—\s]+$/, '');
-                        skinName = skinName.trim();
-                        
-                        // Проверяем что данные валидны
-                        if (skinName && skinName.length > 3 && !isNaN(amount) && !isNaN(price) && amount > 0 && price > 0.6) {
-                            skins.push({ name: skinName, amount: amount, price: price });
-                            console.log("✅ Скин:", skinName, amount, price);
-                        }
+                // Валидация: название не пустое, количество и цена корректные
+                if (skinName && skinName.length > 3 && !isNaN(amount) && amount > 0 && !isNaN(price) && price > 0.6) {
+                    // Проверяем что это не дубликат
+                    if (!skins.some(s => s.name === skinName)) {
+                        skins.push({ name: skinName, amount: amount, price: price });
+                        console.log("✅ Скин найден:", skinName, amount, price);
                     }
                 }
             }
         }
-    } else {
-        console.log("🟡 Таблица со скинами отсутствует в этом отчёте");
+    }
+    
+    // Дополнительный парсинг через регулярное выражение (на случай если таблица сдвинута)
+    if (skins.length === 0) {
+        console.log("Пробуем альтернативный парсинг...");
+        const regex = /([A-Za-z0-9\s\-|()]+\|[A-Za-z0-9\s\-|()]+)\s*\|\s*(\d+)\s*\|\s*([\d\.]+)/g;
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+            let skinName = match[1].trim();
+            const amount = parseInt(match[2]);
+            const price = parseFloat(match[3]);
+            
+            skinName = skinName.replace(/^[-–—\s]+/, '');
+            skinName = skinName.replace(/[-–—\s]+$/, '');
+            skinName = skinName.trim();
+            
+            if (skinName && !isNaN(amount) && !isNaN(price) && amount > 0 && price > 0.6 && 
+                !skinName.includes('Case') && !skinName.includes('Skin') && skinName.length > 5) {
+                if (!skins.some(s => s.name === skinName)) {
+                    skins.push({ name: skinName, amount: amount, price: price });
+                    console.log("✅ Скин (регекс):", skinName, amount, price);
+                }
+            }
+        }
     }
     
     const totalCases = caseLines.reduce((sum, c) => sum + c.amount, 0);
     
     console.log("📊 ИТОГ ПАРСИНГА:");
-    console.log("  - Дата:", dateRange);
-    console.log("  - Кейсов:", caseLines.length, "штук");
-    console.log("  - Скинов:", skins.length, "штук");
-    if (skins.length > 0) console.log("  - Скины:", skins);
+    console.log("  - Кейсов:", caseLines.length);
+    console.log("  - Скинов:", skins.length);
+    if (skins.length > 0) {
+        console.log("  - Список скинов:", skins);
+    }
     
     const [start, end] = dateRange.split(' - ');
     const [day, month, year] = start ? start.split('.') : [0, 0, 0];
