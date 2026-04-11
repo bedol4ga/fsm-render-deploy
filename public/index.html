@@ -595,75 +595,59 @@
                 const amount = parseInt(parts[1]);
                 if (caseName && !isNaN(amount) && amount > 0 && caseName !== 'Case') {
                     caseLines.push({ name: caseName, amount: amount });
+                    console.log("✅ Кейс:", caseName, amount);
                 }
             }
         }
     }
     
-    // ========== ПАРСИНГ СКИНОВ (РАБОЧАЯ ВЕРСИЯ) ==========
+    // ========== ПАРСИНГ СКИНОВ (правильный) ==========
     const skins = [];
     
-    // Ищем таблицу со скинами через регулярку прямо по тексту
-    // Формат: название_скина | количество | цена
-    
-    // Разбиваем текст на строки и ищем строки с | и с ценой
+    // Находим позицию таблицы скинов по маркеру "Skin (>0.6$)"
+    let skinTableStartIndex = -1;
     for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        
-        // Пропускаем строки с кейсами и заголовками
-        if (line.includes('Case') || line.includes('Skin') || line.includes('-----') || line.includes('➙')) {
-            continue;
+        if (lines[i].includes('Skin') && lines[i].includes('>0.6$')) {
+            skinTableStartIndex = i;
+            break;
         }
+    }
+    
+    if (skinTableStartIndex !== -1) {
+        console.log("🟢 Нашли таблицу скинов на строке", skinTableStartIndex);
         
-        // Проверяем что строка содержит | и похожа на скин
-        if (line.includes('|')) {
-            const parts = line.split('|').map(p => p.trim());
+        // Идём по строкам ПОСЛЕ заголовка таблицы
+        for (let i = skinTableStartIndex + 1; i < lines.length; i++) {
+            const line = lines[i];
             
-            // Должно быть 3 части: название, количество, цена
-            if (parts.length >= 3) {
-                let skinName = parts[0];
-                const amount = parseInt(parts[1]);
-                const price = parseFloat(parts[2]);
-                
-                // Очищаем название от мусора
-                skinName = skinName.replace(/^[-–—\s]+/, '');
-                skinName = skinName.replace(/[-–—\s]+$/, '');
-                skinName = skinName.trim();
-                
-                // Валидация: название не пустое, количество и цена корректные
-                if (skinName && skinName.length > 3 && !isNaN(amount) && amount > 0 && !isNaN(price) && price > 0.6) {
-                    // Проверяем что это не дубликат
-                    if (!skins.some(s => s.name === skinName)) {
+            // Останавливаемся при разделителе или пустой строке
+            if (line.includes('-----')) break;
+            if (line.includes('➙')) break;
+            if (line.trim() === '') continue;
+            
+            // Парсим строку с скином
+            if (line.includes('|')) {
+                const parts = line.split('|').map(p => p.trim());
+                if (parts.length >= 3) {
+                    let skinName = parts[0];
+                    const amount = parseInt(parts[1]);
+                    const price = parseFloat(parts[2]);
+                    
+                    // Очистка имени
+                    skinName = skinName.replace(/^[-–—\s]+/, '');
+                    skinName = skinName.replace(/[-–—\s]+$/, '');
+                    skinName = skinName.trim();
+                    
+                    // Проверяем что это не пустышка
+                    if (skinName && skinName.length > 5 && !isNaN(amount) && amount > 0 && !isNaN(price) && price > 0.6) {
                         skins.push({ name: skinName, amount: amount, price: price });
-                        console.log("✅ Скин найден:", skinName, amount, price);
+                        console.log("✅ Скин:", skinName, amount, price);
                     }
                 }
             }
         }
-    }
-    
-    // Дополнительный парсинг через регулярное выражение (на случай если таблица сдвинута)
-    if (skins.length === 0) {
-        console.log("Пробуем альтернативный парсинг...");
-        const regex = /([A-Za-z0-9\s\-|()]+\|[A-Za-z0-9\s\-|()]+)\s*\|\s*(\d+)\s*\|\s*([\d\.]+)/g;
-        let match;
-        while ((match = regex.exec(text)) !== null) {
-            let skinName = match[1].trim();
-            const amount = parseInt(match[2]);
-            const price = parseFloat(match[3]);
-            
-            skinName = skinName.replace(/^[-–—\s]+/, '');
-            skinName = skinName.replace(/[-–—\s]+$/, '');
-            skinName = skinName.trim();
-            
-            if (skinName && !isNaN(amount) && !isNaN(price) && amount > 0 && price > 0.6 && 
-                !skinName.includes('Case') && !skinName.includes('Skin') && skinName.length > 5) {
-                if (!skins.some(s => s.name === skinName)) {
-                    skins.push({ name: skinName, amount: amount, price: price });
-                    console.log("✅ Скин (регекс):", skinName, amount, price);
-                }
-            }
-        }
+    } else {
+        console.log("🟡 Нет таблицы со скинами в этом отчёте");
     }
     
     const totalCases = caseLines.reduce((sum, c) => sum + c.amount, 0);
@@ -672,7 +656,7 @@
     console.log("  - Кейсов:", caseLines.length);
     console.log("  - Скинов:", skins.length);
     if (skins.length > 0) {
-        console.log("  - Список скинов:", skins);
+        console.log("  - Скины:", skins);
     }
     
     const [start, end] = dateRange.split(' - ');
