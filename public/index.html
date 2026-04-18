@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FSM Panel | Drop Stats Dashboard</title>
+    <title>FSM Panel | Steam Stats Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
@@ -216,6 +216,16 @@
             cursor: not-allowed;
         }
 
+        .delete-week-btn {
+            background: #ff4757;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        .delete-week-btn:hover {
+            background: #ff6b6b;
+        }
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -261,10 +271,27 @@
             background: rgba(255,107,107,0.2);
             font-weight: 600;
             cursor: pointer;
+            user-select: none;
+            transition: all 0.2s;
         }
 
         th:hover {
             background: rgba(255,107,107,0.4);
+        }
+
+        th.active-sort {
+            background: rgba(255,107,107,0.5);
+        }
+
+        th.active-sort .sort-icon {
+            opacity: 1;
+        }
+
+        .sort-icon {
+            margin-left: 5px;
+            font-size: 10px;
+            opacity: 0.5;
+            transition: opacity 0.2s;
         }
 
         tr:hover {
@@ -358,11 +385,6 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-
-        .sort-icon {
-            margin-left: 5px;
-            font-size: 10px;
-        }
     </style>
 </head>
 <body class="dark">
@@ -374,14 +396,12 @@
             <p>Автоматический сбор и аналитика дропов из кейсов</p>
         </div>
 
-        <!-- Блок авторизации -->
         <div class="card" id="authPanel">
             <div style="text-align: center; padding: 20px;">
                 <div class="spinner"></div> Загрузка...
             </div>
         </div>
 
-        <!-- Основной контент (показывается после авторизации) -->
         <div id="mainContent" style="display: none;">
             <div class="card input-area">
                 <h2>📥 Добавить новую неделю</h2>
@@ -452,7 +472,11 @@
                     <div class="table-wrapper">
                         <table id="topCasesTable">
                             <thead>
-                                <tr><th data-sort="name">Кейс <span class="sort-icon">↕️</span></th><th data-sort="amount">Кол-во <span class="sort-icon">↕️</span></th><th data-sort="percent">% <span class="sort-icon">↕️</span></th></tr>
+                                <tr>
+                                    <th data-sort="name">Кейс <span class="sort-icon">↕️</span></th>
+                                    <th data-sort="amount">Кол-во <span class="sort-icon">↕️</span></th>
+                                    <th data-sort="percent">% <span class="sort-icon">↕️</span></th>
+                                </tr>
                             </thead>
                             <tbody></tbody>
                         </table>
@@ -463,7 +487,12 @@
                     <div class="table-wrapper">
                         <table id="topSkinsTable">
                             <thead>
-                                <tr><th data-sort="name">Скин <span class="sort-icon">↕️</span></th><th data-sort="amount">Кол-во <span class="sort-icon">↕️</span></th><th data-sort="price">Цена <span class="sort-icon">↕️</span></th><th data-sort="total">Общая <span class="sort-icon">↕️</span></th></tr>
+                                <tr>
+                                    <th data-sort="name">Скин <span class="sort-icon">↕️</span></th>
+                                    <th data-sort="amount">Кол-во <span class="sort-icon">↕️</span></th>
+                                    <th data-sort="price">Цена <span class="sort-icon">↕️</span></th>
+                                    <th data-sort="total">Общая <span class="sort-icon">↕️</span></th>
+                                </tr>
                             </thead>
                             <tbody></tbody>
                         </table>
@@ -475,7 +504,15 @@
                 <h2>📅 История по неделям</h2>
                 <div class="table-wrapper">
                     <table id="historyTable">
-                        <thead><tr><th>Неделя</th><th>Кейсов</th><th>Сумма</th><th>Скинов</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th>Неделя</th>
+                                <th>Кейсов</th>
+                                <th>Сумма</th>
+                                <th>Скинов</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -484,8 +521,6 @@
     </div>
 
     <script>
-        // ========== НАСТРОЙКИ ==========
-        // ⚠️ ЗАМЕНИ НА СВОЙ URL СЕРВЕРА!
         const API_URL = '';
         
         let allData = [];
@@ -494,8 +529,11 @@
         let currentSkinsData = [];
         let weeklyChart = null, pieChart = null, barChart = null;
         let activeToast = null;
-        let casesSortField = 'amount', casesSortOrder = 'desc';
-        let skinsSortField = 'total', skinsSortOrder = 'desc';
+        
+        let casesSortField = 'amount';
+        let casesSortOrder = 'desc';
+        let skinsSortField = 'total';
+        let skinsSortOrder = 'desc';
 
         // ========== ТЕМА ==========
         function toggleTheme() {
@@ -552,159 +590,131 @@
 
         // ========== ПАРСИНГ ==========
         function parseReport(text) {
-    console.log("Начинаем парсинг...");
-    
-    const dateMatch = text.match(/Date:\s*([\d\.\-\s]+)/i);
-    const dateRange = dateMatch ? dateMatch[1].trim() : 'Unknown';
-    
-    const accountsMatch = text.match(/Accounts:\s*(\d+)/i);
-    const accounts = accountsMatch ? parseInt(accountsMatch[1]) : 0;
-    
-    const priceMatch = text.match(/Price of all drop:\s*~\s*([\d\.]+)\$/i);
-    const totalPrice = priceMatch ? parseFloat(priceMatch[1]) : 0;
-    
-    const lines = text.split('\n');
-    
-    // ========== ПАРСИНГ КЕЙСОВ ==========
-    const caseLines = [];
-    let inCaseTable = false;
-    let caseHeaderPassed = false;
-    
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (line.includes('Case') && line.includes('Amount') && line.includes('% of drops')) {
-            inCaseTable = true;
-            caseHeaderPassed = false;
-            continue;
-        }
-        if (inCaseTable && line.includes('-----')) {
-            if (caseHeaderPassed) {
-                inCaseTable = false;
-            } else {
-                caseHeaderPassed = true;
-            }
-            continue;
-        }
-        if (inCaseTable && caseHeaderPassed && line.includes('|')) {
-            const parts = line.split('|').map(p => p.trim());
-            if (parts.length >= 2) {
-                const caseName = parts[0];
-                const amount = parseInt(parts[1]);
-                if (caseName && !isNaN(amount) && amount > 0 && caseName !== 'Case') {
-                    caseLines.push({ name: caseName, amount: amount });
-                    console.log("✅ Кейс:", caseName, amount);
-                }
-            }
-        }
-    }
-    
-    // ========== ПАРСИНГ СКИНОВ ==========
-    const skins = [];
-    
-    let skinTableStartIndex = -1;
-    for (let i = 0; i < lines.length; i++) {
-        if (lines[i].includes('Skin') && lines[i].includes('>0.6$')) {
-            skinTableStartIndex = i;
-            break;
-        }
-    }
-    
-    if (skinTableStartIndex !== -1) {
-        console.log("🟢 Нашли таблицу скинов на строке", skinTableStartIndex);
-        
-        let dividerCount = 0;
-        
-        for (let i = skinTableStartIndex + 1; i < lines.length; i++) {
-            const line = lines[i];
+            console.log("Начинаем парсинг...");
             
-            if (line.includes('-----')) {
-                dividerCount++;
-                if (dividerCount === 1) {
+            const dateMatch = text.match(/Date:\s*([\d\.\-\s]+)/i);
+            const dateRange = dateMatch ? dateMatch[1].trim() : 'Unknown';
+            
+            const accountsMatch = text.match(/Accounts:\s*(\d+)/i);
+            const accounts = accountsMatch ? parseInt(accountsMatch[1]) : 0;
+            
+            const priceMatch = text.match(/Price of all drop:\s*~\s*([\d\.]+)\$/i);
+            const totalPrice = priceMatch ? parseFloat(priceMatch[1]) : 0;
+            
+            const lines = text.split('\n');
+            
+            // Кейсы
+            const caseLines = [];
+            let inCaseTable = false;
+            let caseHeaderPassed = false;
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.includes('Case') && line.includes('Amount') && line.includes('% of drops')) {
+                    inCaseTable = true;
+                    caseHeaderPassed = false;
                     continue;
-                } else if (dividerCount === 2) {
-                    break;
                 }
-            }
-            
-            if (dividerCount === 1 && !line.includes('-----')) {
-                if (line.trim() === '') continue;
-                if (line.includes('➙')) break;
-                
-                if (line.includes('|')) {
+                if (inCaseTable && line.includes('-----')) {
+                    if (caseHeaderPassed) {
+                        inCaseTable = false;
+                    } else {
+                        caseHeaderPassed = true;
+                    }
+                    continue;
+                }
+                if (inCaseTable && caseHeaderPassed && line.includes('|')) {
                     const parts = line.split('|').map(p => p.trim());
-                    
-                    if (parts.length >= 3) {
-                        let skinName = parts[0];
-                        let amountIndex = 1;
-                        
-                        if (isNaN(parseInt(parts[1]))) {
-                            skinName = skinName + " | " + parts[1];
-                            amountIndex = 2;
-                        }
-                        
-                        const amount = parseInt(parts[amountIndex]);
-                        const price = parseFloat(parts[amountIndex + 1]);
-                        
-                        skinName = skinName.replace(/^[-–—\s]+/, '');
-                        skinName = skinName.replace(/[-–—\s]+$/, '');
-                        skinName = skinName.trim();
-                        
-                        if (skinName && skinName.length > 3 && !isNaN(amount) && amount > 0 && !isNaN(price) && price > 0) {
-                            skins.push({ name: skinName, amount: amount, price: price });
-                            console.log("✅ Скин:", skinName, amount, price);
+                    if (parts.length >= 2) {
+                        const caseName = parts[0];
+                        const amount = parseInt(parts[1]);
+                        if (caseName && !isNaN(amount) && amount > 0 && caseName !== 'Case') {
+                            caseLines.push({ name: caseName, amount: amount });
+                            console.log("✅ Кейс:", caseName, amount);
                         }
                     }
                 }
             }
+            
+            // Скины
+            const skins = [];
+            let skinTableStartIndex = -1;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].includes('Skin') && lines[i].includes('>0.6$')) {
+                    skinTableStartIndex = i;
+                    break;
+                }
+            }
+            
+            if (skinTableStartIndex !== -1) {
+                console.log("🟢 Нашли таблицу скинов на строке", skinTableStartIndex);
+                let dividerCount = 0;
+                for (let i = skinTableStartIndex + 1; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (line.includes('-----')) {
+                        dividerCount++;
+                        if (dividerCount === 1) continue;
+                        else if (dividerCount === 2) break;
+                    }
+                    if (dividerCount === 1 && !line.includes('-----')) {
+                        if (line.trim() === '') continue;
+                        if (line.includes('➙')) break;
+                        if (line.includes('|')) {
+                            const parts = line.split('|').map(p => p.trim());
+                            if (parts.length >= 3) {
+                                let skinName = parts[0];
+                                let amountIndex = 1;
+                                if (isNaN(parseInt(parts[1]))) {
+                                    skinName = skinName + " | " + parts[1];
+                                    amountIndex = 2;
+                                }
+                                const amount = parseInt(parts[amountIndex]);
+                                const price = parseFloat(parts[amountIndex + 1]);
+                                skinName = skinName.replace(/^[-–—\s]+/, '').replace(/[-–—\s]+$/, '').trim();
+                                if (skinName && skinName.length > 3 && !isNaN(amount) && amount > 0 && !isNaN(price) && price > 0) {
+                                    skins.push({ name: skinName, amount: amount, price: price });
+                                    console.log("✅ Скин:", skinName, amount, price);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                console.log("🟡 Нет таблицы со скинами");
+            }
+            
+            const totalCases = caseLines.reduce((sum, c) => sum + c.amount, 0);
+            
+            // Конвертация дат
+            const [start, end] = dateRange.split(' - ');
+            function convertDate(dateStr) {
+                if (!dateStr) return null;
+                const parts = dateStr.split('.');
+                if (parts.length === 3) {
+                    const [day, month, year] = parts;
+                    return `${year}-${month}-${day}`;
+                }
+                return null;
+            }
+            
+            console.log("📊 ИТОГ:", { casesCount: caseLines.length, skinsCount: skins.length });
+            
+            return {
+                dateRange: dateRange,
+                weekStart: convertDate(start),
+                weekEnd: convertDate(end),
+                accounts: accounts,
+                totalPrice: totalPrice,
+                totalCases: totalCases,
+                cases: caseLines,
+                skins: skins
+            };
         }
-    } else {
-        console.log("🟡 Нет таблицы со скинами");
-    }
-    
-    const totalCases = caseLines.reduce((sum, c) => sum + c.amount, 0);
-    
-    // ========== КОНВЕРТАЦИЯ ДАТ (ГЛАВНОЕ ИСПРАВЛЕНИЕ) ==========
-    const [start, end] = dateRange.split(' - ');
-    
-    function convertDate(dateStr) {
-        if (!dateStr) return null;
-        const parts = dateStr.split('.');
-        if (parts.length === 3) {
-            const [day, month, year] = parts;
-            return `${year}-${month}-${day}`;
-        }
-        return null;
-    }
-    
-    const weekStart = convertDate(start);
-    const weekEnd = convertDate(end);
-    
-    console.log("📊 ИТОГ:", { 
-        casesCount: caseLines.length, 
-        skinsCount: skins.length,
-        weekStart: weekStart,
-        weekEnd: weekEnd
-    });
-    
-    return {
-        dateRange: dateRange,
-        weekStart: weekStart,
-        weekEnd: weekEnd,
-        accounts: accounts,
-        totalPrice: totalPrice,
-        totalCases: totalCases,
-        cases: caseLines,
-        skins: skins
-    };
-}
 
         // ========== АВТОРИЗАЦИЯ ==========
         async function checkAuth() {
             try {
-                const res = await fetch(`${API_URL}/api/me`, { 
-                    credentials: 'include',
-                    mode: 'cors'
-                });
+                const res = await fetch(`/api/me`, { credentials: 'include' });
                 const data = await res.json();
                 if (data.success && data.user) {
                     document.getElementById('authPanel').innerHTML = `
@@ -733,19 +743,17 @@
         }
 
         function login() {
-            window.location.href = `${API_URL}/auth/steam`;
+            window.location.href = `/auth/steam`;
         }
 
         function logout() {
-            window.location.href = `${API_URL}/auth/logout`;
+            window.location.href = `/auth/logout`;
         }
 
         // ========== ЗАГРУЗКА ДАННЫХ ==========
         async function loadDrops() {
             try {
-                const res = await fetch(`${API_URL}/api/drops`, { 
-                    credentials: 'include'
-                });
+                const res = await fetch(`/api/drops`, { credentials: 'include' });
                 const result = await res.json();
                 if (result.success) {
                     allData = result.data;
@@ -760,7 +768,39 @@
 
         async function addWeek() {
             const text = document.getElementById('reportText').value;
-            if (!text.trim()) { showToast('❌ Вставь текст отчёта', true); return; }
+            if (!text.trim()) { 
+                showToast('❌ Вставь текст отчёта', true); 
+                return; 
+            }
+            
+            // ========== ВАЛИДАЦИЯ ==========
+            if (!text.includes('FSM PANEL') && !text.includes('DROP REPORT')) {
+                showToast('❌ Это не похоже на отчёт FSM Panel', true);
+                return;
+            }
+            
+            if (!text.includes('Case') || !text.includes('Amount')) {
+                showToast('❌ Отчёт не содержит таблицу с кейсами', true);
+                return;
+            }
+            
+            const caseLines = text.split('\n').filter(line => 
+                line.includes('|') && 
+                !line.includes('Case') && 
+                !line.includes('---') &&
+                (line.includes('Case') || line.includes('Terminal') || line.includes('Kilowatt') || line.includes('Revolution'))
+            );
+            
+            if (caseLines.length === 0) {
+                showToast('❌ Не найдено ни одного кейса в отчёте', true);
+                return;
+            }
+            
+            if (!text.match(/Date:\s*[\d\.\-\s]+/i)) {
+                showToast('❌ Отчёт не содержит дату', true);
+                return;
+            }
+            // ========== КОНЕЦ ВАЛИДАЦИИ ==========
             
             const btn = document.getElementById('submitBtn');
             const loader = document.getElementById('loadingIndicator');
@@ -772,7 +812,7 @@
                 loadingStep.innerText = 'Шаг 1/3: Парсинг...';
                 const parsed = parseReport(text);
                 loadingStep.innerText = 'Шаг 2/3: Отправка...';
-                const res = await fetch(`${API_URL}/api/drops`, {
+                const res = await fetch(`/api/drops`, {
                     method: 'POST',
                     credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
@@ -784,7 +824,8 @@
                     document.getElementById('reportText').value = '';
                     await loadDrops();
                 } else {
-                    showToast('❌ Ошибка сохранения', true);
+                    const err = await res.json();
+                    showToast('❌ ' + (err.error || 'Ошибка сохранения'), true);
                 }
             } catch(e) {
                 showToast('❌ Ошибка: ' + e.message, true);
@@ -863,36 +904,151 @@
             renderSkinsTable();
             renderHistoryTable();
             updateCharts();
+            initSortListeners();
         }
 
         function renderCasesTable() {
             const sorted = [...currentCasesData];
             sorted.sort((a,b) => {
-                let valA = a[casesSortField], valB = b[casesSortField];
-                if (casesSortField === 'name') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
-                return casesSortOrder === 'desc' ? (valA > valB ? -1 : 1) : (valA < valB ? -1 : 1);
+                let valA = a[casesSortField];
+                let valB = b[casesSortField];
+                if (casesSortField === 'name') {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                }
+                if (casesSortOrder === 'desc') return valA > valB ? -1 : 1;
+                return valA < valB ? -1 : 1;
             });
+            
             document.querySelector('#topCasesTable tbody').innerHTML = sorted.slice(0, 15).map(c => `
-                <tr><td>${c.name}</td><td>${c.amount}</td><td>${c.percent.toFixed(1)}%</td></tr>
+                <tr>
+                    <td>${c.name}</td>
+                    <td>${c.amount}</td>
+                    <td>${c.percent.toFixed(1)}%</td>
+                </tr>
             `).join('');
+            
+            updateSortIndicators();
         }
 
         function renderSkinsTable() {
             const sorted = [...currentSkinsData];
             sorted.sort((a,b) => {
-                let valA = a[skinsSortField], valB = b[skinsSortField];
-                if (skinsSortField === 'name') { valA = valA.toLowerCase(); valB = valB.toLowerCase(); }
-                return skinsSortOrder === 'desc' ? (valA > valB ? -1 : 1) : (valA < valB ? -1 : 1);
+                let valA = a[skinsSortField];
+                let valB = b[skinsSortField];
+                if (skinsSortField === 'name') {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                }
+                if (skinsSortOrder === 'desc') return valA > valB ? -1 : 1;
+                return valA < valB ? -1 : 1;
             });
+            
             document.querySelector('#topSkinsTable tbody').innerHTML = sorted.slice(0, 15).map(s => `
-                <tr><td>${s.name}</td><td>${s.amount}</td><td>$${s.price.toFixed(2)}</td><td>$${s.total.toFixed(2)}</td></tr>
+                <tr>
+                    <td>${s.name}</td>
+                    <td>${s.amount}</td>
+                    <td>$${s.price.toFixed(2)}</td>
+                    <td>$${s.total.toFixed(2)}</td>
+                </tr>
             `).join('');
+            
+            updateSortIndicators();
         }
 
         function renderHistoryTable() {
-            document.querySelector('#historyTable tbody').innerHTML = filteredData.slice().reverse().map(w => `
-                <tr><td>${w.date_range || 'Unknown'}</td><td>${w.total_cases || 0}</td><td>$${(w.total_price || 0).toFixed(2)}</td><td>${w.skins?.length || 0}</td></tr>
-            `).join('');
+            const tbody = document.querySelector('#historyTable tbody');
+            if (tbody) {
+                tbody.innerHTML = filteredData.slice().reverse().map(w => `
+                    <tr>
+                        <td>${w.date_range || 'Unknown'}</td>
+                        <td>${w.total_cases || 0}</td>
+                        <td>$${(w.total_price || 0).toFixed(2)}</td>
+                        <td>${w.skins?.length || 0}</td>
+                        <td><button class="delete-week-btn" data-id="${w.id}" style="background:#ff4757; padding:5px 10px; font-size:12px; border:none; border-radius:6px; cursor:pointer;">🗑️ Удалить</button></td>
+                    </tr>
+                `).join('');
+            }
+            
+            document.querySelectorAll('.delete-week-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    const id = btn.getAttribute('data-id');
+                    if (confirm('Точно удалить эту неделю?')) {
+                        try {
+                            const res = await fetch(`/api/drops/${id}`, {
+                                method: 'DELETE',
+                                credentials: 'include'
+                            });
+                            if (res.ok) {
+                                showToast('✅ Неделя удалена');
+                                loadDrops();
+                            } else {
+                                showToast('❌ Ошибка удаления', true);
+                            }
+                        } catch(e) {
+                            showToast('❌ Ошибка: ' + e.message, true);
+                        }
+                    }
+                };
+            });
+        }
+
+        function updateSortIndicators() {
+            document.querySelectorAll('#topCasesTable th').forEach(th => {
+                const field = th.getAttribute('data-sort');
+                const iconSpan = th.querySelector('.sort-icon');
+                if (field === casesSortField) {
+                    th.classList.add('active-sort');
+                    iconSpan.innerHTML = casesSortOrder === 'desc' ? '▼' : '▲';
+                } else {
+                    th.classList.remove('active-sort');
+                    iconSpan.innerHTML = '↕️';
+                }
+            });
+            
+            document.querySelectorAll('#topSkinsTable th').forEach(th => {
+                const field = th.getAttribute('data-sort');
+                const iconSpan = th.querySelector('.sort-icon');
+                if (field === skinsSortField) {
+                    th.classList.add('active-sort');
+                    iconSpan.innerHTML = skinsSortOrder === 'desc' ? '▼' : '▲';
+                } else {
+                    th.classList.remove('active-sort');
+                    iconSpan.innerHTML = '↕️';
+                }
+            });
+        }
+
+        function initSortListeners() {
+            document.querySelectorAll('#topCasesTable th').forEach(th => {
+                const field = th.getAttribute('data-sort');
+                if (field) {
+                    th.onclick = () => {
+                        if (casesSortField === field) {
+                            casesSortOrder = casesSortOrder === 'desc' ? 'asc' : 'desc';
+                        } else {
+                            casesSortField = field;
+                            casesSortOrder = 'desc';
+                        }
+                        renderCasesTable();
+                    };
+                }
+            });
+            
+            document.querySelectorAll('#topSkinsTable th').forEach(th => {
+                const field = th.getAttribute('data-sort');
+                if (field) {
+                    th.onclick = () => {
+                        if (skinsSortField === field) {
+                            skinsSortOrder = skinsSortOrder === 'desc' ? 'asc' : 'desc';
+                        } else {
+                            skinsSortField = field;
+                            skinsSortOrder = 'desc';
+                        }
+                        renderSkinsTable();
+                    };
+                }
+            });
         }
 
         function updateCharts() {
@@ -932,31 +1088,10 @@
             });
         }
 
-        function initSortListeners() {
-            document.querySelectorAll('#topCasesTable th').forEach(th => {
-                const field = th.getAttribute('data-sort');
-                if (field) th.onclick = () => {
-                    if (casesSortField === field) casesSortOrder = casesSortOrder === 'desc' ? 'asc' : 'desc';
-                    else { casesSortField = field; casesSortOrder = 'desc'; }
-                    renderCasesTable();
-                };
-            });
-            document.querySelectorAll('#topSkinsTable th').forEach(th => {
-                const field = th.getAttribute('data-sort');
-                if (field) th.onclick = () => {
-                    if (skinsSortField === field) skinsSortOrder = skinsSortOrder === 'desc' ? 'asc' : 'desc';
-                    else { skinsSortField = field; skinsSortOrder = 'desc'; }
-                    renderSkinsTable();
-                };
-            });
-        }
-
         document.getElementById('filterDateFrom')?.addEventListener('change', applyFilters);
         document.getElementById('filterDateTo')?.addEventListener('change', applyFilters);
         document.getElementById('filterMinPrice')?.addEventListener('input', applyFilters);
         document.getElementById('sortOrder')?.addEventListener('change', applyFilters);
-        
-        setInterval(() => { initSortListeners(); }, 500);
         
         checkAuth();
     </script>
