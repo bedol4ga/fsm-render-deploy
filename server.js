@@ -11,7 +11,7 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
-// Подключение к Supabase
+// Supabase клиент
 const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_KEY
@@ -21,7 +21,6 @@ console.log('✅ Supabase подключен');
 
 // ========== ФУНКЦИИ РАБОТЫ С БД ==========
 
-// Сохранить пользователя
 async function saveUser(profile) {
     const { data, error } = await supabase
         .from('users')
@@ -34,14 +33,10 @@ async function saveUser(profile) {
         .select()
         .single();
     
-    if (error) {
-        console.error('Ошибка сохранения пользователя:', error);
-        throw error;
-    }
+    if (error) throw error;
     return data;
 }
 
-// Получить пользователя по ID
 async function getUserById(steamId) {
     const { data, error } = await supabase
         .from('users')
@@ -49,37 +44,33 @@ async function getUserById(steamId) {
         .eq('steam_id', steamId)
         .single();
     
-    if (error && error.code !== 'PGRST116') {
-        console.error('Ошибка получения пользователя:', error);
-    }
+    if (error && error.code !== 'PGRST116') throw error;
     return data;
 }
 
-// Сохранить дроп
 async function saveDrop(steamId, dropData) {
     const { data, error } = await supabase
         .from('weekly_drops')
         .insert({
             steam_id: steamId,
-            week_start: dropData.weekStart,
-            week_end: dropData.weekEnd,
-            date_range: dropData.dateRange,
-            accounts: dropData.accounts,
-            total_price: dropData.totalPrice,
-            total_cases: dropData.totalCases,
+            week_start: dropData.weekStart || null,
+            week_end: dropData.weekEnd || null,
+            date_range: dropData.dateRange || '',
+            accounts: dropData.accounts || 0,
+            total_price: dropData.totalPrice || 0,
+            total_cases: dropData.totalCases || 0,
             cases_data: dropData.cases || [],
             skins_data: dropData.skins || []
         })
         .select();
     
     if (error) {
-        console.error('Ошибка сохранения дропа:', error);
+        console.error('Ошибка Supabase:', error);
         throw error;
     }
     return data[0];
 }
 
-// Получить все дропы пользователя
 async function getUserDrops(steamId) {
     const { data, error } = await supabase
         .from('weekly_drops')
@@ -87,10 +78,7 @@ async function getUserDrops(steamId) {
         .eq('steam_id', steamId)
         .order('created_at', { ascending: false });
     
-    if (error) {
-        console.error('Ошибка получения дропов:', error);
-        throw error;
-    }
+    if (error) throw error;
     
     return data.map(row => ({
         ...row,
@@ -99,10 +87,22 @@ async function getUserDrops(steamId) {
     }));
 }
 
+// Удаление дропа
+async function deleteDrop(dropId, steamId) {
+    const { error } = await supabase
+        .from('weekly_drops')
+        .delete()
+        .eq('id', dropId)
+        .eq('steam_id', steamId);
+    
+    if (error) throw error;
+    return true;
+}
+
 // ========== STEAM AUTH ==========
 passport.use(new SteamStrategy({
     returnURL: `${process.env.STEAM_REALM}/auth/steam/callback`,
-    realm: process.env.STEAM_REALM,
+    realm: process.env.SEAM_REALM,
     apiKey: process.env.STEAM_API_KEY
 }, async (identifier, profile, done) => {
     try {
@@ -188,6 +188,19 @@ app.post('/api/drops', async (req, res) => {
         res.json({ success: true, id: result.id });
     } catch (err) {
         console.error('Ошибка при сохранении:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ========== НОВЫЙ РОУТ: УДАЛЕНИЕ НЕДЕЛИ ==========
+app.delete('/api/drops/:id', async (req, res) => {
+    if (!req.isAuthenticated()) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    try {
+        await deleteDrop(req.params.id, req.user.steam_id);
+        res.json({ success: true });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
