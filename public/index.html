@@ -598,7 +598,7 @@
         }
     }
     
-    // ========== ПАРСИНГ СКИНОВ (ИСПРАВЛЕНО) ==========
+    // ========== ПАРСИНГ СКИНОВ ==========
     const skins = [];
     
     let skinTableStartIndex = -1;
@@ -620,10 +620,8 @@
             if (line.includes('-----')) {
                 dividerCount++;
                 if (dividerCount === 1) {
-                    console.log("  → Пропускаем первый разделитель");
                     continue;
                 } else if (dividerCount === 2) {
-                    console.log("  → Встретили второй разделитель, выходим");
                     break;
                 }
             }
@@ -634,14 +632,11 @@
                 
                 if (line.includes('|')) {
                     const parts = line.split('|').map(p => p.trim());
-                    console.log("  → Разбито на части:", parts);
                     
                     if (parts.length >= 3) {
-                        // Склеиваем название скина (может быть разбито на несколько частей из-за | в названии)
                         let skinName = parts[0];
                         let amountIndex = 1;
                         
-                        // Если вторая часть не число — значит это часть названия
                         if (isNaN(parseInt(parts[1]))) {
                             skinName = skinName + " | " + parts[1];
                             amountIndex = 2;
@@ -654,11 +649,9 @@
                         skinName = skinName.replace(/[-–—\s]+$/, '');
                         skinName = skinName.trim();
                         
-                        console.log(`  → Собрано: имя="${skinName}", кол-во=${amount}, цена=${price}`);
-                        
                         if (skinName && skinName.length > 3 && !isNaN(amount) && amount > 0 && !isNaN(price) && price > 0) {
                             skins.push({ name: skinName, amount: amount, price: price });
-                            console.log("  ✅ ДОБАВЛЕН СКИН!");
+                            console.log("✅ Скин:", skinName, amount, price);
                         }
                     }
                 }
@@ -670,16 +663,33 @@
     
     const totalCases = caseLines.reduce((sum, c) => sum + c.amount, 0);
     
-    console.log("📊 ИТОГ:", { casesCount: caseLines.length, skinsCount: skins.length });
-    if (skins.length > 0) console.log("  Скины:", skins);
-    
+    // ========== КОНВЕРТАЦИЯ ДАТ (ГЛАВНОЕ ИСПРАВЛЕНИЕ) ==========
     const [start, end] = dateRange.split(' - ');
-    const [day, month, year] = start ? start.split('.') : [0, 0, 0];
+    
+    function convertDate(dateStr) {
+        if (!dateStr) return null;
+        const parts = dateStr.split('.');
+        if (parts.length === 3) {
+            const [day, month, year] = parts;
+            return `${year}-${month}-${day}`;
+        }
+        return null;
+    }
+    
+    const weekStart = convertDate(start);
+    const weekEnd = convertDate(end);
+    
+    console.log("📊 ИТОГ:", { 
+        casesCount: caseLines.length, 
+        skinsCount: skins.length,
+        weekStart: weekStart,
+        weekEnd: weekEnd
+    });
     
     return {
         dateRange: dateRange,
-        weekStart: `${year}-${month}-${day}`,
-        weekEnd: end || '',
+        weekStart: weekStart,
+        weekEnd: weekEnd,
         accounts: accounts,
         totalPrice: totalPrice,
         totalCases: totalCases,
