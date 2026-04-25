@@ -87,7 +87,6 @@ async function getUserDrops(steamId) {
     }));
 }
 
-// Удаление дропа
 async function deleteDrop(dropId, steamId) {
     const { error } = await supabase
         .from('weekly_drops')
@@ -99,10 +98,87 @@ async function deleteDrop(dropId, steamId) {
     return true;
 }
 
+// ========== ПОЛУЧЕНИЕ ИЗОБРАЖЕНИЯ СКИНА ИЗ STEAM ==========
+const skinImageCache = new Map();
+
+async function getSteamSkinImage(skinName) {
+    // Проверяем кэш
+    if (skinImageCache.has(skinName)) {
+        return skinImageCache.get(skinName);
+    }
+    
+    try {
+        // Очищаем название: убираем качество в скобках
+        let cleanName = skinName.replace(/\s*\([^)]*\)\s*$/, '').trim();
+        
+        // Кодируем для URL
+        const encodedName = encodeURIComponent(cleanName);
+        
+        // Запрос к Steam Community Market
+        const marketUrl = `https://steamcommunity.com/market/listings/730/${encodedName}`;
+        
+        // Пытаемся получить страницу предмета, чтобы извлечь изображение
+        const response = await fetch(marketUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Не удалось загрузить страницу');
+        }
+        
+        const html = await response.text();
+        
+        // Ищем ссылку на изображение в HTML
+        // Формат: <img src="https://community.cloudflare.steamstatic.com/economy/image/...
+        const imgRegex = /<img[^>]*src="(https:\/\/community\.cloudflare\.steamstatic\.com\/economy\/image\/[^"]+)"/i;
+        const match = html.match(imgRegex);
+        
+        let imageUrl = null;
+        if (match && match[1]) {
+            imageUrl = match[1];
+        }
+        
+        const result = {
+            imageUrl: imageUrl,
+            marketUrl: marketUrl,
+            name: cleanName
+        };
+        
+        // Сохраняем в кэш
+        skinImageCache.set(skinName, result);
+        
+        return result;
+        
+    } catch (error) {
+        console.error(`Ошибка получения изображения для ${skinName}:`, error.message);
+        const result = {
+            imageUrl: null,
+            marketUrl: `https://steamcommunity.com/market/listings/730/${encodeURIComponent(skinName)}`,
+            name: skinName
+        };
+        skinImageCache.set(skinName, result);
+        return result;
+    }
+}
+
+// API для получения изображения скина
+app.get('/api/skin-image/:name', async (req, res) => {
+    const skinName = decodeURIComponent(req.params.name);
+    
+    try {
+        const result = await getSteamSkinImage(skinName);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ========== STEAM AUTH ==========
 passport.use(new SteamStrategy({
     returnURL: `${process.env.STEAM_REALM}/auth/steam/callback`,
-    realm: process.env.SEAM_REALM,
+    realm: process.env.STEAM_REALM,
     apiKey: process.env.STEAM_API_KEY
 }, async (identifier, profile, done) => {
     try {
@@ -192,7 +268,6 @@ app.post('/api/drops', async (req, res) => {
     }
 });
 
-// ========== НОВЫЙ РОУТ: УДАЛЕНИЕ НЕДЕЛИ ==========
 app.delete('/api/drops/:id', async (req, res) => {
     if (!req.isAuthenticated()) {
         return res.status(401).json({ error: 'Unauthorized' });
