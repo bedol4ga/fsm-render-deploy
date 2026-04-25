@@ -891,7 +891,7 @@
             }));
         }
 
-        async function updateWidgets(topWeek, topSkin) {
+        function updateWidgets(topWeek, topSkin) {
     // Виджет "Самая прибыльная неделя"
     const topWeekWidget = document.getElementById('topWeekWidget');
     if (topWeekWidget && topWeek) {
@@ -910,57 +910,30 @@
         topWeekWidget.innerHTML = `<h2>🏆 Самая прибыльная неделя</h2><div style="text-align:center;padding:20px;">Нет данных</div>`;
     }
     
-    // Виджет "Самый дорогой скин" с картинкой из Steam
+    // Виджет "Самый дорогой скин" — с СИМВОЛАМИ в ссылке (без кодирования)
     const topSkinWidget = document.getElementById('topSkinWidget');
     if (topSkinWidget && topSkin) {
-        // Показываем загрузку
+        // Ссылка БЕЗ encodeURIComponent — просто подставляем название с символами
+        const marketUrl = `https://steamcommunity.com/market/listings/730/${topSkin.name}`;
+        
         topSkinWidget.innerHTML = `
             <h2>💎 Самый дорогой скин</h2>
             <div style="text-align: center; padding: 20px;">
-                <div class="spinner"></div>
-                <div>Загрузка изображения...</div>
+                <div style="font-size: 64px; background: linear-gradient(135deg, #ff6b6b, #ff8e53); width: 100px; height: 100px; border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px auto;">
+                    🎨
+                </div>
+                <div class="stat-value" style="font-size: 1rem; word-break: break-word;">${topSkin.name}</div>
+                <div class="stat-value">$${topSkin.price.toFixed(2)}</div>
+                <div class="stat-label">💰 Средняя цена</div>
+                <div style="margin-top: 10px;">📦 Количество: ${topSkin.amount} шт.</div>
+                <div>💵 Общая стоимость: $${topSkin.total.toFixed(2)}</div>
+                <div style="margin-top: 15px;">
+                    <a href="${marketUrl}" target="_blank" style="background: #1b2838; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; display: inline-block;">
+                        🔗 Открыть в Steam Market
+                    </a>
+                </div>
             </div>
         `;
-        
-        try {
-            // Запрашиваем изображение с сервера
-            const encodedName = encodeURIComponent(topSkin.name);
-            const res = await fetch(`/api/skin-image/${encodedName}`);
-            const imageData = await res.json();
-            
-            topSkinWidget.innerHTML = `
-                <h2>💎 Самый дорогой скин</h2>
-                <div style="text-align: center; padding: 20px;">
-                    ${imageData.imageUrl ? 
-                        `<div style="margin-bottom: 15px;">
-                            <img src="${imageData.imageUrl}" style="max-width: 200px; max-height: 200px; border-radius: 12px;" alt="${topSkin.name}">
-                         </div>` 
-                        : `<div style="font-size: 48px; margin-bottom: 15px;">🎨</div>`
-                    }
-                    <div class="stat-value" style="font-size: 1rem;">${topSkin.name}</div>
-                    <div class="stat-value">$${topSkin.price.toFixed(2)}</div>
-                    <div class="stat-label">💰 Средняя цена</div>
-                    <div style="margin-top: 10px;">📦 Количество: ${topSkin.amount} шт.</div>
-                    <div>💵 Общая стоимость: $${topSkin.total.toFixed(2)}</div>
-                    <div style="margin-top: 10px;">
-                        <a href="${imageData.marketUrl}" target="_blank" style="color: #ff8e53; text-decoration: none;">🔗 Посмотреть на маркете Steam →</a>
-                    </div>
-                </div>
-            `;
-        } catch (error) {
-            console.error('Ошибка загрузки изображения:', error);
-            topSkinWidget.innerHTML = `
-                <h2>💎 Самый дорогой скин</h2>
-                <div style="text-align: center; padding: 20px;">
-                    <div style="font-size: 48px; margin-bottom: 15px;">🎨</div>
-                    <div class="stat-value" style="font-size: 1rem;">${topSkin.name}</div>
-                    <div class="stat-value">$${topSkin.price.toFixed(2)}</div>
-                    <div class="stat-label">💰 Средняя цена</div>
-                    <div style="margin-top: 10px;">📦 Количество: ${topSkin.amount} шт.</div>
-                    <div>💵 Общая стоимость: $${topSkin.total.toFixed(2)}</div>
-                </div>
-            `;
-        }
     } else if (topSkinWidget) {
         topSkinWidget.innerHTML = `<h2>💎 Самый дорогой скин</h2><div style="text-align:center;padding:20px;">Нет данных</div>`;
     }
