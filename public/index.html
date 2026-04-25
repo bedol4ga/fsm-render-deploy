@@ -891,41 +891,80 @@
             }));
         }
 
-        function updateWidgets(topWeek, topSkin) {
-            const topWeekWidget = document.getElementById('topWeekWidget');
-            if (topWeekWidget && topWeek) {
-                topWeekWidget.innerHTML = `
-                    <h2>🏆 Самая прибыльная неделя</h2>
-                    <div style="text-align: center; padding: 20px;">
-                        <div class="stat-value" style="font-size: 1.3rem;">${topWeek.date_range || 'Unknown'}</div>
-                        <div class="stat-value">$${topWeek.total_price?.toFixed(2) || '0'}</div>
-                        <div class="stat-label">💰 Общая сумма</div>
-                        <div style="margin-top: 10px;">📦 ${topWeek.total_cases || 0} кейсов</div>
-                        <div>🎮 ${topWeek.accounts || 0} аккаунтов</div>
-                        <div>💎 ${topWeek.skins?.length || 0} скинов >0.6$</div>
-                    </div>
-                `;
-            } else if (topWeekWidget) {
-                topWeekWidget.innerHTML = `<h2>🏆 Самая прибыльная неделя</h2><div style="text-align:center;padding:20px;">Нет данных</div>`;
-            }
+        async function updateWidgets(topWeek, topSkin) {
+    // Виджет "Самая прибыльная неделя"
+    const topWeekWidget = document.getElementById('topWeekWidget');
+    if (topWeekWidget && topWeek) {
+        topWeekWidget.innerHTML = `
+            <h2>🏆 Самая прибыльная неделя</h2>
+            <div style="text-align: center; padding: 20px;">
+                <div class="stat-value" style="font-size: 1.3rem;">${topWeek.date_range || 'Unknown'}</div>
+                <div class="stat-value">$${topWeek.total_price?.toFixed(2) || '0'}</div>
+                <div class="stat-label">💰 Общая сумма</div>
+                <div style="margin-top: 10px;">📦 ${topWeek.total_cases || 0} кейсов</div>
+                <div>🎮 ${topWeek.accounts || 0} аккаунтов</div>
+                <div>💎 ${topWeek.skins?.length || 0} скинов >0.6$</div>
+            </div>
+        `;
+    } else if (topWeekWidget) {
+        topWeekWidget.innerHTML = `<h2>🏆 Самая прибыльная неделя</h2><div style="text-align:center;padding:20px;">Нет данных</div>`;
+    }
+    
+    // Виджет "Самый дорогой скин" с картинкой из Steam
+    const topSkinWidget = document.getElementById('topSkinWidget');
+    if (topSkinWidget && topSkin) {
+        // Показываем загрузку
+        topSkinWidget.innerHTML = `
+            <h2>💎 Самый дорогой скин</h2>
+            <div style="text-align: center; padding: 20px;">
+                <div class="spinner"></div>
+                <div>Загрузка изображения...</div>
+            </div>
+        `;
+        
+        try {
+            // Запрашиваем изображение с сервера
+            const encodedName = encodeURIComponent(topSkin.name);
+            const res = await fetch(`/api/skin-image/${encodedName}`);
+            const imageData = await res.json();
             
-            const topSkinWidget = document.getElementById('topSkinWidget');
-            if (topSkinWidget && topSkin) {
-                topSkinWidget.innerHTML = `
-                    <h2>💎 Самый дорогой скин</h2>
-                    <div style="text-align: center; padding: 20px;">
-                        <div class="stat-value" style="font-size: 1rem;">${topSkin.name}</div>
-                        <div class="stat-value">$${topSkin.price.toFixed(2)}</div>
-                        <div class="stat-label">💰 Средняя цена</div>
-                        <div style="margin-top: 10px;">📦 Количество: ${topSkin.amount} шт.</div>
-                        <div>💵 Общая стоимость: $${topSkin.total.toFixed(2)}</div>
+            topSkinWidget.innerHTML = `
+                <h2>💎 Самый дорогой скин</h2>
+                <div style="text-align: center; padding: 20px;">
+                    ${imageData.imageUrl ? 
+                        `<div style="margin-bottom: 15px;">
+                            <img src="${imageData.imageUrl}" style="max-width: 200px; max-height: 200px; border-radius: 12px;" alt="${topSkin.name}">
+                         </div>` 
+                        : `<div style="font-size: 48px; margin-bottom: 15px;">🎨</div>`
+                    }
+                    <div class="stat-value" style="font-size: 1rem;">${topSkin.name}</div>
+                    <div class="stat-value">$${topSkin.price.toFixed(2)}</div>
+                    <div class="stat-label">💰 Средняя цена</div>
+                    <div style="margin-top: 10px;">📦 Количество: ${topSkin.amount} шт.</div>
+                    <div>💵 Общая стоимость: $${topSkin.total.toFixed(2)}</div>
+                    <div style="margin-top: 10px;">
+                        <a href="${imageData.marketUrl}" target="_blank" style="color: #ff8e53; text-decoration: none;">🔗 Посмотреть на маркете Steam →</a>
                     </div>
-                `;
-            } else if (topSkinWidget) {
-                topSkinWidget.innerHTML = `<h2>💎 Самый дорогой скин</h2><div style="text-align:center;padding:20px;">Нет данных</div>`;
-            }
+                </div>
+            `;
+        } catch (error) {
+            console.error('Ошибка загрузки изображения:', error);
+            topSkinWidget.innerHTML = `
+                <h2>💎 Самый дорогой скин</h2>
+                <div style="text-align: center; padding: 20px;">
+                    <div style="font-size: 48px; margin-bottom: 15px;">🎨</div>
+                    <div class="stat-value" style="font-size: 1rem;">${topSkin.name}</div>
+                    <div class="stat-value">$${topSkin.price.toFixed(2)}</div>
+                    <div class="stat-label">💰 Средняя цена</div>
+                    <div style="margin-top: 10px;">📦 Количество: ${topSkin.amount} шт.</div>
+                    <div>💵 Общая стоимость: $${topSkin.total.toFixed(2)}</div>
+                </div>
+            `;
         }
-
+    } else if (topSkinWidget) {
+        topSkinWidget.innerHTML = `<h2>💎 Самый дорогой скин</h2><div style="text-align:center;padding:20px;">Нет данных</div>`;
+    }
+}
         function renderDashboard() {
             if (!filteredData.length) {
                 document.getElementById('summaryStats').innerHTML = '<div class="stat-box">Нет данных</div>';
