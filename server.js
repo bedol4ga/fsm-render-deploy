@@ -127,36 +127,18 @@ app.get('/api/skin-image/:name', async (req, res) => {
         console.log('Запрос к маркету:', listingUrl);
         
         const listingRes = await fetch(listingUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0' }
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
         });
         const listingHtml = await listingRes.text();
         
-        let classid = null;
-        
-        // Пробуем разные регулярки
-        let match = listingHtml.match(/Market_LoadOrderSpread\((\d+),/);
-        if (match) classid = match[1];
-        
-        if (!classid) {
-            match = listingHtml.match(/data-asset-classid="(\d+)"/);
-            if (match) classid = match[1];
-        }
-        
-        if (!classid) {
-            match = listingHtml.match(/classid:"(\d+)"/);
-            if (match) classid = match[1];
-        }
-        
-        if (!classid) {
-            match = listingHtml.match(/classid\["(\d+)"\]/);
-            if (match) classid = match[1];
-        }
-        
-        if (!classid) {
+        // Ищем classid в формате "classid":"123456"
+        const match = listingHtml.match(/"classid":"(\d+)"/);
+        if (!match) {
             console.log('classid не найден для:', skinName);
             return res.json({ url: null, error: 'ClassID не найден' });
         }
         
+        const classid = match[1];
         console.log('classid найден:', classid);
         
         const apiUrl = `https://api.steampowered.com/ISteamEconomy/GetAssetClassInfo/v1/?appid=730&key=${process.env.STEAM_API_KEY}&class_count=1&classid0=${classid}`;
@@ -170,6 +152,8 @@ app.get('/api/skin-image/:name', async (req, res) => {
         }
         
         const fullImageUrl = `https://steamcommunity-a.akamaihd.net/economy/image/${iconUrl}/512fx512f`;
+        console.log('Картинка найдена:', fullImageUrl);
+        
         imageCache.set(skinName, fullImageUrl);
         res.json({ url: fullImageUrl });
         
