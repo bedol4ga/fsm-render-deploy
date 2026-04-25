@@ -20,7 +20,6 @@ const supabase = createClient(
 console.log('✅ Supabase подключен');
 
 // ========== ФУНКЦИИ РАБОТЫ С БД ==========
-
 async function saveUser(profile) {
     const { data, error } = await supabase
         .from('users')
@@ -98,80 +97,61 @@ async function deleteDrop(dropId, steamId) {
     return true;
 }
 
-// ========== ПОЛУЧЕНИЕ ИЗОБРАЖЕНИЯ СКИНА ИЗ STEAM ==========
-const skinImageCache = new Map();
+// ========== ПОЛУЧЕНИЕ КАРТИНКИ СКИНА ЧЕРЕЗ STEAM API ==========
+const imageCache = new Map();
 
-async function getSteamSkinImage(skinName) {
-    // Проверяем кэш
-    if (skinImageCache.has(skinName)) {
-        return skinImageCache.get(skinName);
+app.get('/api/skin-image/:name', async (req, res) => {
+    const skinName = decodeURIComponent(req.params.name);
+    
+    if (imageCache.has(skinName)) {
+        return res.json({ url: imageCache.get(skinName) });
     }
     
     try {
-        // Очищаем название: убираем качество в скобках
-        let cleanName = skinName.replace(/\s*\([^)]*\)\s*$/, '').trim();
+        // 1. Получаем market_hash_name
+        const searchUrl = `https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name=${encodeURIComponent(skinName)}`;
+        const searchRes = await fetch(searchUrl);
+        const searchData = await searchRes.json();
         
-        // Кодируем для URL
-        const encodedName = encodeURIComponent(cleanName);
+        if (!searchData.success) {
+            return res.json({ url: null, error: 'Скин не найден' });
+        }
         
-        // Запрос к Steam Community Market
-        const marketUrl = `https://steamcommunity.com/market/listings/730/${encodedName}`;
-        
-        // Пытаемся получить страницу предмета, чтобы извлечь изображение
-        const response = await fetch(marketUrl, {
+        // 2. Получаем classid через страницу предмета
+        const classUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(skinName)}`;
+        const classPage = await fetch(classUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
         });
+        const classHtml = await classPage.text();
         
-        if (!response.ok) {
-            throw new Error('Не удалось загрузить страницу');
+        // Ищем classid в HTML
+        const classidMatch = classHtml.match(/Market_LoadOrderSpread\((\d+),/);
+        if (!classidMatch) {
+            return res.json({ url: null, error: 'ClassID не найден' });
+        }
+        const classid = classidMatch[1];
+        
+        // 3. Дёргаем официальное Steam API
+        const apiUrl = `https://api.steampowered.com/ISteamEconomy/GetAssetClassInfo/v1/?appid=730&key=${process.env.STEAM_API_KEY}&class_count=1&classid0=${classid}`;
+        const apiRes = await fetch(apiUrl);
+        const apiData = await apiRes.json();
+        
+        const iconUrl = apiData.result?.assets?.[classid]?.icon_url;
+        if (!iconUrl) {
+            return res.json({ url: null, error: 'Иконка не найдена' });
         }
         
-        const html = await response.text();
+        // 4. Формируем полную ссылку на картинку
+        const fullImageUrl = `https://steamcommunity-a.akamaihd.net/economy/image/${iconUrl}/512fx512f`;
         
-        // Ищем ссылку на изображение в HTML
-        // Формат: <img src="https://community.cloudflare.steamstatic.com/economy/image/...
-        const imgRegex = /<img[^>]*src="(https:\/\/community\.cloudflare\.steamstatic\.com\/economy\/image\/[^"]+)"/i;
-        const match = html.match(imgRegex);
-        
-        let imageUrl = null;
-        if (match && match[1]) {
-            imageUrl = match[1];
-        }
-        
-        const result = {
-            imageUrl: imageUrl,
-            marketUrl: marketUrl,
-            name: cleanName
-        };
-        
-        // Сохраняем в кэш
-        skinImageCache.set(skinName, result);
-        
-        return result;
+        imageCache.set(skinName, fullImageUrl);
+        res.json({ url: fullImageUrl });
         
     } catch (error) {
-        console.error(`Ошибка получения изображения для ${skinName}:`, error.message);
-        const result = {
-            imageUrl: null,
-            marketUrl: `https://steamcommunity.com/market/listings/730/${encodeURIComponent(skinName)}`,
-            name: skinName
-        };
-        skinImageCache.set(skinName, result);
-        return result;
-    }
-}
-
-// API для получения изображения скина
-app.get('/api/skin-image/:name', async (req, res) => {
-    const skinName = decodeURIComponent(req.params.name);
-    
-    try {
-        const result = await getSteamSkinImage(skinName);
-        res.json(result);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error('Ошибка получения картинки:', error);
+        res.status(500).json({ url: null, error: error.message });
     }
 });
 
