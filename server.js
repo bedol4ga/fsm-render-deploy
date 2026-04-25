@@ -112,7 +112,7 @@ app.get('/api/proxy', async (req, res) => {
     }
 });
 
-// ========== ПОЛУЧЕНИЕ КАРТИНКИ СКИНА ЧЕРЕЗ STEAM API ==========
+// ========== ПОЛУЧЕНИЕ КАРТИНКИ СКИНА (РАБОЧАЯ ВЕРСИЯ) ==========
 const imageCache = new Map();
 
 app.get('/api/skin-image/:name', async (req, res) => {
@@ -123,6 +123,7 @@ app.get('/api/skin-image/:name', async (req, res) => {
     }
     
     try {
+        // Получаем страницу маркета для поиска classid
         const listingUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(skinName)}`;
         console.log('Запрос к маркету:', listingUrl);
         
@@ -141,16 +142,19 @@ app.get('/api/skin-image/:name', async (req, res) => {
         const classid = match[1];
         console.log('classid найден:', classid);
         
-        const apiUrl = `https://api.steampowered.com/ISteamEconomy/GetAssetClassInfo/v1/?appid=730&key=${process.env.STEAM_API_KEY}&class_count=1&classid0=${classid}`;
+        // Запрашиваем информацию о предмете через Steam API
+        const apiUrl = `https://api.steampowered.com/ISteamEconomy/GetAssetClassInfo/v1/?appid=730&key=${process.env.STEAM_API_KEY}&classid0=${classid}`;
         const apiRes = await fetch(apiUrl);
         const apiData = await apiRes.json();
         
-        const iconUrl = apiData.result?.assets?.[classid]?.icon_url;
+        // Иконка лежит прямо в result[classid].icon_url
+        const iconUrl = apiData.result?.[classid]?.icon_url;
         if (!iconUrl) {
-            console.log('иконка не найдена');
+            console.log('иконка не найдена для classid:', classid);
             return res.json({ url: null, error: 'Иконка не найдена' });
         }
         
+        // Формируем полную ссылку на картинку
         const fullImageUrl = `https://steamcommunity-a.akamaihd.net/economy/image/${iconUrl}/512fx512f`;
         console.log('Картинка найдена:', fullImageUrl);
         
