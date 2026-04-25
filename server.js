@@ -108,43 +108,41 @@ app.get('/api/skin-image/:name', async (req, res) => {
     }
     
     try {
-        // 1. Получаем market_hash_name
-        const searchUrl = `https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name=${encodeURIComponent(skinName)}`;
-        const searchRes = await fetch(searchUrl);
-        const searchData = await searchRes.json();
+        // 1. Получаем страницу маркета, чтобы вытащить classid
+        const listingUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(skinName)}`;
+        console.log('Запрос к маркету:', listingUrl);
         
-        if (!searchData.success) {
-            return res.json({ url: null, error: 'Скин не найден' });
-        }
-        
-        // 2. Получаем classid через страницу предмета
-        const classUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(skinName)}`;
-        const classPage = await fetch(classUrl, {
+        const listingRes = await fetch(listingUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
         });
-        const classHtml = await classPage.text();
+        const listingHtml = await listingRes.text();
         
         // Ищем classid в HTML
-        const classidMatch = classHtml.match(/Market_LoadOrderSpread\((\d+),/);
+        const classidMatch = listingHtml.match(/Market_LoadOrderSpread\( ?(\d+),/);
         if (!classidMatch) {
+            console.log('classid не найден для:', skinName);
             return res.json({ url: null, error: 'ClassID не найден' });
         }
-        const classid = classidMatch[1];
         
-        // 3. Дёргаем официальное Steam API
+        const classid = classidMatch[1];
+        console.log('classid найден:', classid);
+        
+        // 2. Дёргаем официальное Steam API с нашим ключом
         const apiUrl = `https://api.steampowered.com/ISteamEconomy/GetAssetClassInfo/v1/?appid=730&key=${process.env.STEAM_API_KEY}&class_count=1&classid0=${classid}`;
         const apiRes = await fetch(apiUrl);
         const apiData = await apiRes.json();
         
         const iconUrl = apiData.result?.assets?.[classid]?.icon_url;
         if (!iconUrl) {
+            console.log('иконка не найдена для classid:', classid);
             return res.json({ url: null, error: 'Иконка не найдена' });
         }
         
-        // 4. Формируем полную ссылку на картинку
+        // 3. Формируем полную ссылку на картинку
         const fullImageUrl = `https://steamcommunity-a.akamaihd.net/economy/image/${iconUrl}/512fx512f`;
+        console.log('Картинка найдена:', fullImageUrl);
         
         imageCache.set(skinName, fullImageUrl);
         res.json({ url: fullImageUrl });
