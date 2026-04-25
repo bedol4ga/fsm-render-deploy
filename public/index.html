@@ -72,7 +72,7 @@
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1450px;
             margin: 0 auto;
         }
 
@@ -321,22 +321,6 @@
             position: relative;
         }
 
-        .skeleton {
-            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
-            border-radius: 8px;
-        }
-
-        @keyframes shimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
-
-        .skeleton-chart {
-            height: 250px;
-        }
-
         .toast {
             position: fixed;
             bottom: 20px;
@@ -445,6 +429,18 @@
 
             <div class="stats-grid" id="summaryStats"></div>
 
+            <!-- НОВЫЕ ВИДЖЕТЫ -->
+            <div class="two-columns" id="specialWidgets">
+                <div class="card" id="topWeekWidget">
+                    <h2>🏆 Самая прибыльная неделя</h2>
+                    <div style="text-align: center; padding: 20px;"><div class="spinner"></div></div>
+                </div>
+                <div class="card" id="topSkinWidget">
+                    <h2>💎 Самый дорогой скин</h2>
+                    <div style="text-align: center; padding: 20px;"><div class="spinner"></div></div>
+                </div>
+            </div>
+
             <div class="three-columns">
                 <div class="card">
                     <h2>📈 Динамика дропов</h2>
@@ -490,12 +486,12 @@
                                 <tr>
                                     <th data-sort="name">Скин <span class="sort-icon">↕️</span></th>
                                     <th data-sort="amount">Кол-во <span class="sort-icon">↕️</span></th>
-                                    <th data-sort="price">Цена <span class="sort-icon">↕️</span></th>
+                                    <th data-sort="price">Ср. цена <span class="sort-icon">↕️</span></th>
                                     <th data-sort="total">Общая <span class="sort-icon">↕️</span></th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
-                        </table>
+                        ｜DSML｜
                     </div>
                 </div>
             </div>
@@ -773,7 +769,7 @@
                 return; 
             }
             
-            // ========== ВАЛИДАЦИЯ ==========
+            // Валидация
             if (!text.includes('FSM PANEL') && !text.includes('DROP REPORT')) {
                 showToast('❌ Это не похоже на отчёт FSM Panel', true);
                 return;
@@ -788,11 +784,11 @@
                 line.includes('|') && 
                 !line.includes('Case') && 
                 !line.includes('---') &&
-                (line.includes('Case') || line.includes('Terminal') || line.includes('Kilowatt') || line.includes('Revolution'))
+                (line.includes('Terminal') || line.includes('Kilowatt') || line.includes('Revolution'))
             );
             
             if (caseLines.length === 0) {
-                showToast('❌ Не найдено ни одного кейса в отчёте', true);
+                showToast('❌ Не найдено ни одного кейса', true);
                 return;
             }
             
@@ -800,7 +796,6 @@
                 showToast('❌ Отчёт не содержит дату', true);
                 return;
             }
-            // ========== КОНЕЦ ВАЛИДАЦИИ ==========
             
             const btn = document.getElementById('submitBtn');
             const loader = document.getElementById('loadingIndicator');
@@ -865,14 +860,74 @@
             applyFilters();
         }
 
+        // Агрегация скинов с усреднением цены (ИСПРАВЛЕНИЕ БАГА)
+        function aggregateSkins(weeksData) {
+            const skinsMap = new Map();
+            for (const week of weeksData) {
+                if (week.skins && Array.isArray(week.skins)) {
+                    for (const skin of week.skins) {
+                        const key = skin.name;
+                        if (!skinsMap.has(key)) {
+                            skinsMap.set(key, { totalAmount: 0, totalSum: 0 });
+                        }
+                        const entry = skinsMap.get(key);
+                        entry.totalAmount += skin.amount;
+                        entry.totalSum += skin.price * skin.amount;
+                    }
+                }
+            }
+            return Array.from(skinsMap.entries()).map(([name, data]) => ({
+                name: name,
+                amount: data.totalAmount,
+                price: data.totalSum / data.totalAmount,
+                total: data.totalSum
+            }));
+        }
+
+        function updateWidgets(topWeek, topSkin) {
+            const topWeekWidget = document.getElementById('topWeekWidget');
+            if (topWeekWidget && topWeek) {
+                topWeekWidget.innerHTML = `
+                    <h2>🏆 Самая прибыльная неделя</h2>
+                    <div style="text-align: center; padding: 20px;">
+                        <div class="stat-value" style="font-size: 1.3rem;">${topWeek.date_range || 'Unknown'}</div>
+                        <div class="stat-value">$${topWeek.total_price?.toFixed(2) || '0'}</div>
+                        <div class="stat-label">💰 Общая сумма</div>
+                        <div style="margin-top: 10px;">📦 ${topWeek.total_cases || 0} кейсов</div>
+                        <div>🎮 ${topWeek.accounts || 0} аккаунтов</div>
+                        <div>💎 ${topWeek.skins?.length || 0} скинов >0.6$</div>
+                    </div>
+                `;
+            } else if (topWeekWidget) {
+                topWeekWidget.innerHTML = `<h2>🏆 Самая прибыльная неделя</h2><div style="text-align:center;padding:20px;">Нет данных</div>`;
+            }
+            
+            const topSkinWidget = document.getElementById('topSkinWidget');
+            if (topSkinWidget && topSkin) {
+                topSkinWidget.innerHTML = `
+                    <h2>💎 Самый дорогой скин</h2>
+                    <div style="text-align: center; padding: 20px;">
+                        <div class="stat-value" style="font-size: 1rem;">${topSkin.name}</div>
+                        <div class="stat-value">$${topSkin.price.toFixed(2)}</div>
+                        <div class="stat-label">💰 Средняя цена</div>
+                        <div style="margin-top: 10px;">📦 Количество: ${topSkin.amount} шт.</div>
+                        <div>💵 Общая стоимость: $${topSkin.total.toFixed(2)}</div>
+                    </div>
+                `;
+            } else if (topSkinWidget) {
+                topSkinWidget.innerHTML = `<h2>💎 Самый дорогой скин</h2><div style="text-align:center;padding:20px;">Нет данных</div>`;
+            }
+        }
+
         function renderDashboard() {
             if (!filteredData.length) {
                 document.getElementById('summaryStats').innerHTML = '<div class="stat-box">Нет данных</div>';
+                updateWidgets(null, null);
                 return;
             }
             
             let totalCasesAgg = 0, totalPriceAgg = 0, totalSkinsAgg = 0;
-            const casesMap = new Map(), skinsMap = new Map();
+            const casesMap = new Map();
             
             for (const week of filteredData) {
                 totalCasesAgg += week.total_cases || 0;
@@ -881,11 +936,7 @@
                     week.cases.forEach(c => casesMap.set(c.name, (casesMap.get(c.name) || 0) + c.amount));
                 }
                 if (week.skins) {
-                    week.skins.forEach(s => {
-                        if (!skinsMap.has(s.name)) skinsMap.set(s.name, { amount: 0, price: s.price });
-                        skinsMap.get(s.name).amount += s.amount;
-                        totalSkinsAgg += s.amount;
-                    });
+                    week.skins.forEach(s => { totalSkinsAgg += s.amount; });
                 }
             }
             
@@ -897,14 +948,29 @@
                 <div class="stat-box"><div class="stat-value">$${(totalPriceAgg / totalCasesAgg).toFixed(2)}</div><div class="stat-label">Средний чек</div></div>
             `;
             
+            // Агрегация скинов с усреднением цены (исправление бага)
+            const aggregatedSkins = aggregateSkins(filteredData);
+            currentSkinsData = aggregatedSkins;
+            
+            // Топ неделя и топ скин
+            let topWeek = filteredData[0];
+            for (const week of filteredData) {
+                if (week.total_price > topWeek.total_price) topWeek = week;
+            }
+            
+            let topSkin = aggregatedSkins.length ? aggregatedSkins[0] : null;
+            for (const skin of aggregatedSkins) {
+                if (skin.price > topSkin.price) topSkin = skin;
+            }
+            
             currentCasesData = Array.from(casesMap.entries()).map(([name, amount]) => ({ name, amount, percent: (amount / totalCasesAgg) * 100 }));
-            currentSkinsData = Array.from(skinsMap.entries()).map(([name, data]) => ({ name, amount: data.amount, price: data.price, total: data.amount * data.price }));
             
             renderCasesTable();
             renderSkinsTable();
             renderHistoryTable();
             updateCharts();
             initSortListeners();
+            updateWidgets(topWeek, topSkin);
         }
 
         function renderCasesTable() {
